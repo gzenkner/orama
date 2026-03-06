@@ -33,6 +33,9 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
   const today = toISODate(new Date());
   const inRange = isoInRange(today, outcome.startDate, outcome.endDate);
   const todayEntry = daily[`${outcome.id}:${today}`] ?? { title: "", done: false };
+  const todayItems =
+    Array.isArray(todayEntry.items) && todayEntry.items.length ? todayEntry.items : [todayEntry.title ?? ""];
+  const todayItemsDone = Array.isArray(todayEntry.itemsDone) ? todayEntry.itemsDone : [];
 
   const weekStart = toISODate(startOfWeek(parseISODate(today), weekStartsOn));
   const monthKey = monthKeyFromDate(parseISODate(today));
@@ -90,12 +93,60 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
           <div className="text-xs font-medium text-zinc-400">Today</div>
           <div className="mt-2 grid gap-2">
             <div className="text-xs text-zinc-500">{formatShortDate(today)}</div>
-            <Input
-              value={todayEntry.title}
-              onChange={(e) => actions.setDaily(outcome.id, today, { title: e.target.value })}
-              placeholder={inRange ? "Daily commitment for today…" : "Outside outcome date range"}
-              disabled={!inRange}
-            />
+            <div className="grid gap-2">
+              {todayItems.map((t, idx) => {
+                const done = Boolean(todayItemsDone[idx]);
+                return (
+                  <div key={idx} className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className={[
+                        "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition focus:outline-none focus:ring-2 focus:ring-zinc-200/20 disabled:opacity-50 disabled:cursor-not-allowed",
+                        done
+                          ? "border-emerald-400 bg-emerald-400/20 text-emerald-200"
+                          : "border-zinc-800 bg-zinc-950 text-transparent hover:bg-zinc-900"
+                      ].join(" ")}
+                      aria-label={done ? `Mark task ${idx + 1} not done` : `Mark task ${idx + 1} done`}
+                      aria-pressed={done}
+                      title={done ? "Mark not done" : "Mark done"}
+                      onClick={() => actions.toggleDailyItemDone(outcome.id, today, idx)}
+                      disabled={!inRange}
+                    >
+                      ✓
+                    </button>
+                    <Input
+                      value={t}
+                      onChange={(e) => actions.setDailyItem(outcome.id, today, idx, e.target.value)}
+                      placeholder={
+                        inRange
+                          ? idx === 0
+                            ? "Daily task for today…"
+                            : "Another tiny task…"
+                          : "Outside outcome date range"
+                      }
+                      disabled={!inRange}
+                      className={[
+                        "h-9 rounded-lg px-2 text-[13px]",
+                        done ? "text-zinc-400 line-through placeholder:text-zinc-600" : ""
+                      ].join(" ")}
+                      aria-label={`Daily task ${idx + 1}`}
+                    />
+                  </div>
+                );
+              })}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 text-sm text-zinc-400 transition hover:bg-zinc-900 hover:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-200/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="Add daily task"
+                  title="Add daily task"
+                  onClick={() => actions.addDailyItem(outcome.id, today)}
+                  disabled={!inRange}
+                >
+                  +
+                </button>
+              </div>
+            </div>
             <div className="flex items-center gap-2">
               <Button
                 variant={todayEntry.done ? "secondary" : "primary"}

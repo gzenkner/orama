@@ -1,5 +1,5 @@
 import React from "react";
-import type { Outcome, WeekStartsOn } from "../types";
+import type { DailyGoal, Outcome, WeekStartsOn } from "../types";
 import { actions, useAppState } from "../store";
 import {
   daysForWeekInMonth,
@@ -17,6 +17,12 @@ import Button from "../ui/Button";
 import Card from "../ui/Card";
 import Input from "../ui/Input";
 import Progress from "../ui/Progress";
+
+function dailyHasPlan(entry: DailyGoal | undefined): boolean {
+  if (!entry) return false;
+  const items = Array.isArray(entry.items) && entry.items.length ? entry.items : [entry.title];
+  return items.some((t) => t.trim().length > 0);
+}
 
 function dayLabel(dateISO: string) {
   const d = parseISODate(dateISO);
@@ -96,7 +102,7 @@ function TimelineYardstick({
   expandedWeekKeys: Set<string>;
   monthly: Record<string, { title: string }>;
   weekly: Record<string, { title: string }>;
-  daily: Record<string, { title: string; done: boolean }>;
+  daily: Record<string, DailyGoal>;
   onJumpMonth: (monthKey: string) => void;
   onJumpWeek: (monthKey: string, weekStartISO: string) => void;
   onJumpDay: (monthKey: string, weekStartISO: string, dateISO: string) => void;
@@ -137,7 +143,7 @@ function TimelineYardstick({
         const iso = dayNumberToISO(dn);
         const entry = daily[`${outcome.id}:${iso}`];
         if (entry?.done) done++;
-        else if (entry?.title?.trim()) planned++;
+        else if (dailyHasPlan(entry)) planned++;
       }
 
       const doneRatio = total ? done / total : 0;
@@ -281,7 +287,7 @@ function TimelineYardstick({
             const x = xForDay(dn);
             const entry = daily[`${outcome.id}:${dateISO}`];
             const isDone = Boolean(entry?.done);
-            const isPlanned = Boolean(entry?.title?.trim());
+            const isPlanned = dailyHasPlan(entry);
             const fill = isDone ? doneColor : isPlanned ? plannedColor : "#3f3f46";
             const cy = y - 34 - (idx % 2) * 10;
             return (
@@ -683,12 +689,15 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
                                     {weekDays.map((dateISO) => {
                                       const dayKey = `${outcome.id}:${dateISO}`;
                                       const entry = daily[dayKey] ?? { title: "", done: false };
+                                      const items =
+                                        Array.isArray(entry.items) && entry.items.length ? entry.items : [entry.title ?? ""];
+                                      const itemsDone = Array.isArray(entry.itemsDone) ? entry.itemsDone : [];
                                       return (
                                         <div
                                           key={dateISO}
                                           id={`day-${dateISO}`}
                                           className={[
-                                            "flex flex-col gap-2 rounded-2xl border p-3 sm:flex-row sm:items-center",
+                                            "flex flex-col gap-2 rounded-2xl border p-3 sm:flex-row sm:items-start",
                                             isToday(dateISO) ? "border-emerald-500/40 bg-emerald-500/5" : "border-zinc-900 bg-zinc-950/30"
                                           ].join(" ")}
                                         >
@@ -704,11 +713,51 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
                                             <div className="text-sm font-medium">{dayLabel(dateISO)}</div>
                                           </div>
                                           <div className="min-w-0 flex-1">
-                                            <Input
-                                              value={entry.title}
-                                              onChange={(e) => actions.setDaily(outcome.id, dateISO, { title: e.target.value })}
-                                              placeholder="Daily: the smallest thing you’ll actually do."
-                                            />
+                                            <div className="grid gap-2">
+                                              {items.map((t, idx) => {
+                                                const done = Boolean(itemsDone[idx]);
+                                                return (
+                                                  <div key={idx} className="flex items-center gap-2">
+                                                    <button
+                                                      type="button"
+                                                      className={[
+                                                        "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition focus:outline-none focus:ring-2 focus:ring-zinc-200/20",
+                                                        done
+                                                          ? "border-emerald-400 bg-emerald-400/20 text-emerald-200"
+                                                          : "border-zinc-800 bg-zinc-950 text-transparent hover:bg-zinc-900"
+                                                      ].join(" ")}
+                                                      aria-label={done ? `Mark task ${idx + 1} not done` : `Mark task ${idx + 1} done`}
+                                                      aria-pressed={done}
+                                                      title={done ? "Mark not done" : "Mark done"}
+                                                      onClick={() => actions.toggleDailyItemDone(outcome.id, dateISO, idx)}
+                                                    >
+                                                      ✓
+                                                    </button>
+                                                    <Input
+                                                      value={t}
+                                                      onChange={(e) => actions.setDailyItem(outcome.id, dateISO, idx, e.target.value)}
+                                                      placeholder={idx === 0 ? "Daily: the smallest thing you’ll actually do." : "Another tiny task…"}
+                                                      className={[
+                                                        "h-9 rounded-lg px-2 text-[13px]",
+                                                        done ? "text-zinc-400 line-through placeholder:text-zinc-600" : ""
+                                                      ].join(" ")}
+                                                      aria-label={`Daily task ${idx + 1}`}
+                                                    />
+                                                  </div>
+                                                );
+                                              })}
+                                              <div className="flex justify-end">
+                                                <button
+                                                  type="button"
+                                                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 text-sm text-zinc-400 transition hover:bg-zinc-900 hover:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-200/20"
+                                                  aria-label="Add daily task"
+                                                  title="Add daily task"
+                                                  onClick={() => actions.addDailyItem(outcome.id, dateISO)}
+                                                >
+                                                  +
+                                                </button>
+                                              </div>
+                                            </div>
                                           </div>
                                         </div>
                                       );

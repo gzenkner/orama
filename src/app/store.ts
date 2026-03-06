@@ -34,6 +34,17 @@ function defaultState(): State {
   };
 }
 
+function normalizeDailyItems(goal: DailyGoal | undefined): string[] {
+  if (!goal) return [""];
+  if (Array.isArray(goal.items) && goal.items.length) return goal.items;
+  return [goal.title ?? ""];
+}
+
+function normalizeDailyItemsDone(goal: DailyGoal | undefined, items: string[]): boolean[] {
+  const raw = goal && Array.isArray(goal.itemsDone) ? goal.itemsDone : [];
+  return items.map((_, idx) => Boolean(raw[idx]));
+}
+
 function readState(): State {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -150,7 +161,59 @@ export const actions = {
     const key = `${outcomeId}:${dateISO}`;
     store.set((prev) => {
       const prevDaily = prev.daily[key] ?? { title: "", done: false };
-      return { ...prev, daily: { ...prev.daily, [key]: { ...prevDaily, ...patch } } };
+      let nextDaily: DailyGoal = { ...prevDaily, ...patch };
+
+      if ("items" in patch && Array.isArray(patch.items)) {
+        const items = patch.items.length ? patch.items : [""];
+        const itemsDoneRaw = "itemsDone" in patch && Array.isArray(patch.itemsDone) ? patch.itemsDone : prevDaily.itemsDone;
+        const itemsDone = normalizeDailyItemsDone({ ...prevDaily, itemsDone: itemsDoneRaw } as DailyGoal, items);
+        nextDaily = { ...nextDaily, title: items[0] ?? "", items, itemsDone };
+      } else if (typeof patch.title === "string" && Array.isArray(prevDaily.items) && prevDaily.items.length) {
+        const items = [...prevDaily.items];
+        items[0] = patch.title;
+        const itemsDone = normalizeDailyItemsDone(prevDaily, items);
+        nextDaily = { ...nextDaily, items, itemsDone };
+      } else if ("itemsDone" in patch && Array.isArray(patch.itemsDone)) {
+        const items = normalizeDailyItems(prevDaily);
+        const itemsDone = normalizeDailyItemsDone({ ...prevDaily, itemsDone: patch.itemsDone } as DailyGoal, items);
+        nextDaily = { ...nextDaily, title: items[0] ?? "", items, itemsDone };
+      }
+
+      return { ...prev, daily: { ...prev.daily, [key]: nextDaily } };
+    });
+  },
+  setDailyItem: (outcomeId: string, dateISO: string, index: number, title: string) => {
+    const key = `${outcomeId}:${dateISO}`;
+    store.set((prev) => {
+      const prevDaily = prev.daily[key] ?? { title: "", done: false };
+      const items = [...normalizeDailyItems(prevDaily)];
+      while (items.length <= index) items.push("");
+      items[index] = title;
+      const itemsDone = normalizeDailyItemsDone(prevDaily, items);
+      return { ...prev, daily: { ...prev.daily, [key]: { ...prevDaily, title: items[0] ?? "", items, itemsDone } } };
+    });
+  },
+  addDailyItem: (outcomeId: string, dateISO: string) => {
+    const key = `${outcomeId}:${dateISO}`;
+    store.set((prev) => {
+      const prevDaily = prev.daily[key] ?? { title: "", done: false };
+      const baseItems = normalizeDailyItems(prevDaily);
+      const baseDone = normalizeDailyItemsDone(prevDaily, baseItems);
+      const items = [...baseItems, ""];
+      const itemsDone = [...baseDone, false];
+      return { ...prev, daily: { ...prev.daily, [key]: { ...prevDaily, title: items[0] ?? "", items, itemsDone } } };
+    });
+  },
+  toggleDailyItemDone: (outcomeId: string, dateISO: string, index: number) => {
+    const key = `${outcomeId}:${dateISO}`;
+    store.set((prev) => {
+      const prevDaily = prev.daily[key] ?? { title: "", done: false };
+      const items = [...normalizeDailyItems(prevDaily)];
+      while (items.length <= index) items.push("");
+      const itemsDone = [...normalizeDailyItemsDone(prevDaily, items)];
+      while (itemsDone.length <= index) itemsDone.push(false);
+      itemsDone[index] = !itemsDone[index];
+      return { ...prev, daily: { ...prev.daily, [key]: { ...prevDaily, title: items[0] ?? "", items, itemsDone } } };
     });
   },
   toggleDailyDone: (outcomeId: string, dateISO: string) => {

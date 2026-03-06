@@ -19,6 +19,8 @@ export type WeeklyGoal = {
 
 export type DailyGoal = {
   title: string;
+  items?: string[];
+  itemsDone?: boolean[];
   done: boolean;
   doneAt?: string;
 };

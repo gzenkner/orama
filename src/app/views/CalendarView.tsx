@@ -1,5 +1,5 @@
 import React from "react";
-import type { Outcome, WeekStartsOn } from "../types";
+import type { DailyGoal, Outcome, WeekStartsOn } from "../types";
 import { actions, useAppState } from "../store";
 import {
   formatMonthLabel,
@@ -18,12 +18,18 @@ import { cn } from "../ui/cn";
 
 type DayState = "out" | "none" | "planned" | "done";
 
-function dayState(outcomeId: string, dateISO: string, daily: Record<string, { title: string; done: boolean }>, inRange: boolean): DayState {
+function dailyHasPlan(entry: DailyGoal | undefined): boolean {
+  if (!entry) return false;
+  const items = Array.isArray(entry.items) && entry.items.length ? entry.items : [entry.title];
+  return items.some((t) => t.trim().length > 0);
+}
+
+function dayState(outcomeId: string, dateISO: string, daily: Record<string, DailyGoal>, inRange: boolean): DayState {
   if (!inRange) return "out";
   const entry = daily[`${outcomeId}:${dateISO}`];
   if (!entry) return "none";
   if (entry.done) return "done";
-  if (entry.title.trim()) return "planned";
+  if (dailyHasPlan(entry)) return "planned";
   return "none";
 }
 
@@ -32,7 +38,7 @@ function isoInRange(dateISO: string, startISO: string, endISO: string): boolean 
   return d >= parseISODate(startISO).getTime() && d <= parseISODate(endISO).getTime();
 }
 
-function streakInfo(outcome: Outcome, daily: Record<string, { title: string; done: boolean }>): { current: number; best: number } {
+function streakInfo(outcome: Outcome, daily: Record<string, DailyGoal>): { current: number; best: number } {
   const start = parseISODate(outcome.startDate);
   const end = parseISODate(outcome.endDate);
   const today = new Date();
@@ -165,6 +171,8 @@ function DayModal({
 
   if (!dateISO) return null;
   const entry = daily[`${outcome.id}:${dateISO}`] ?? { title: "", done: false };
+  const items = Array.isArray(entry.items) && entry.items.length ? entry.items : [entry.title ?? ""];
+  const itemsDone = Array.isArray(entry.itemsDone) ? entry.itemsDone : [];
 
   const d = parseISODate(dateISO);
   const monthKey = monthKeyFromDate(d);
@@ -205,12 +213,52 @@ function DayModal({
         </Card>
 
         <div className="grid gap-2">
-          <div className="text-xs font-medium text-zinc-400">Daily commitment</div>
-          <Input
-            value={entry.title}
-            onChange={(e) => actions.setDaily(outcome.id, dateISO, { title: e.target.value })}
-            placeholder="The smallest slice you can finish today."
-          />
+          <div className="text-xs font-medium text-zinc-400">Daily tasks</div>
+          <div className="grid gap-2">
+            {items.map((t, idx) => {
+              const done = Boolean(itemsDone[idx]);
+              return (
+                <div key={idx} className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className={[
+                      "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition focus:outline-none focus:ring-2 focus:ring-zinc-200/20",
+                      done
+                        ? "border-emerald-400 bg-emerald-400/20 text-emerald-200"
+                        : "border-zinc-800 bg-zinc-950 text-transparent hover:bg-zinc-900"
+                    ].join(" ")}
+                    aria-label={done ? `Mark task ${idx + 1} not done` : `Mark task ${idx + 1} done`}
+                    aria-pressed={done}
+                    title={done ? "Mark not done" : "Mark done"}
+                    onClick={() => actions.toggleDailyItemDone(outcome.id, dateISO, idx)}
+                  >
+                    ✓
+                  </button>
+                  <Input
+                    value={t}
+                    onChange={(e) => actions.setDailyItem(outcome.id, dateISO, idx, e.target.value)}
+                    placeholder={idx === 0 ? "The smallest slice you can finish today." : "Another tiny task…"}
+                    className={[
+                      "h-9 rounded-lg px-2 text-[13px]",
+                      done ? "text-zinc-400 line-through placeholder:text-zinc-600" : ""
+                    ].join(" ")}
+                    aria-label={`Daily task ${idx + 1}`}
+                  />
+                </div>
+              );
+            })}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 text-sm text-zinc-400 transition hover:bg-zinc-900 hover:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-200/20"
+                aria-label="Add daily task"
+                title="Add daily task"
+                onClick={() => actions.addDailyItem(outcome.id, dateISO)}
+              >
+                +
+              </button>
+            </div>
+          </div>
           <div className="text-xs text-zinc-500">Tip: if it takes longer than ~10 minutes, make it smaller.</div>
         </div>
       </div>
