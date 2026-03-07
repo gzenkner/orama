@@ -1,5 +1,5 @@
 import React from "react";
-import type { Outcome } from "./types";
+import type { AppTab, Outcome } from "./types";
 import { actions, useAppState } from "./store";
 import { formatShortDate, monthKeysInRange, parseISODate, toISODate } from "./date";
 import Button from "./ui/Button";
@@ -217,8 +217,10 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
   const outcomes = useAppState((s) => s.outcomes);
   const selectedOutcomeId = useAppState((s) => s.selectedOutcomeId);
   const weekStartsOn = useAppState((s) => s.weekStartsOn);
-  const [tab, setTab] = React.useState<TabKey>("overview");
+  const tab = useAppState((s) => s.ui.activeTab);
+  const scrollTopByTab = useAppState((s) => s.ui.scrollTopByTab);
   const [editOpen, setEditOpen] = React.useState(false);
+  const scrollRef = React.useRef<HTMLDivElement | null>(null);
 
   const outcome = React.useMemo(() => outcomes.find((o) => o.id === selectedOutcomeId), [outcomes, selectedOutcomeId]);
 
@@ -226,6 +228,34 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
     if (outcome) return;
     if (outcomes.length) actions.selectOutcome(firstOutcomeId(outcomes)!);
   }, [outcomes, outcome]);
+
+  React.useLayoutEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    container.scrollTop = scrollTopByTab[tab] ?? 0;
+  }, [tab, scrollTopByTab]);
+
+  React.useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    let frame = 0;
+    const persistScroll = (tabKey: AppTab) => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        actions.setScrollTopForTab(tabKey, container.scrollTop);
+      });
+    };
+
+    persistScroll(tab);
+
+    const handleScroll = () => persistScroll(tab);
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [tab]);
 
   if (!outcome) {
     return (
@@ -263,12 +293,12 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Tabs value={tab} onChange={setTab} />
+          <Tabs value={tab} onChange={(next: TabKey) => actions.setActiveTab(next)} />
           <Button onClick={() => setEditOpen(true)}>Edit</Button>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-4">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto p-4">
         {tab === "overview" ? <OverviewView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
         {tab === "plan" ? <PlanView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
         {tab === "calendar" ? <CalendarView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}

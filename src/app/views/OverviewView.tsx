@@ -126,11 +126,21 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
                       }
                       disabled={!inRange}
                       className={[
-                        "h-9 rounded-lg px-2 text-[13px]",
+                        "h-9 flex-1 rounded-lg px-2 text-[13px]",
                         done ? "text-zinc-400 line-through placeholder:text-zinc-600" : ""
                       ].join(" ")}
                       aria-label={`Daily task ${idx + 1}`}
                     />
+                    <button
+                      type="button"
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 text-sm text-zinc-400 transition hover:bg-zinc-900 hover:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-200/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label={`Delete daily task ${idx + 1}`}
+                      title="Delete daily task"
+                      onClick={() => actions.removeDailyItem(outcome.id, today, idx)}
+                      disabled={!inRange}
+                    >
+                      -
+                    </button>
                   </div>
                 );
               })}

@@ -1,5 +1,5 @@
 import React from "react";
-import type { DailyGoal, MonthlyGoal, Outcome, PersistedStateV1, WeekStartsOn, WeeklyGoal } from "./types";
+import type { AppTab, DailyGoal, MonthlyGoal, Outcome, PersistedStateV1, WeekStartsOn, WeeklyGoal } from "./types";
 
 const STORAGE_KEY = "goals_app_state_v1";
 
@@ -25,7 +25,9 @@ function defaultState(): State {
     selectedOutcomeId: undefined,
     ui: {
       showMonthlyObjectives: false,
-      showWeeklyObjectives: false
+      showWeeklyObjectives: false,
+      activeTab: "overview",
+      scrollTopByTab: {}
     },
     outcomes: [],
     monthly: {},
@@ -106,6 +108,18 @@ export const actions = {
   },
   toggleShowWeeklyObjectives: () => {
     store.set((prev) => ({ ...prev, ui: { ...prev.ui, showWeeklyObjectives: !prev.ui.showWeeklyObjectives } }));
+  },
+  setActiveTab: (activeTab: AppTab) => {
+    store.set((prev) => ({ ...prev, ui: { ...prev.ui, activeTab } }));
+  },
+  setScrollTopForTab: (tab: AppTab, scrollTop: number) => {
+    store.set((prev) => ({
+      ...prev,
+      ui: {
+        ...prev.ui,
+        scrollTopByTab: { ...prev.ui.scrollTopByTab, [tab]: scrollTop }
+      }
+    }));
   },
   selectOutcome: (id: string) => {
     store.set((prev) => ({ ...prev, selectedOutcomeId: id }));
@@ -202,6 +216,25 @@ export const actions = {
       const items = [...baseItems, ""];
       const itemsDone = [...baseDone, false];
       return { ...prev, daily: { ...prev.daily, [key]: { ...prevDaily, title: items[0] ?? "", items, itemsDone } } };
+    });
+  },
+  removeDailyItem: (outcomeId: string, dateISO: string, index: number) => {
+    const key = `${outcomeId}:${dateISO}`;
+    store.set((prev) => {
+      const prevDaily = prev.daily[key] ?? { title: "", done: false };
+      const baseItems = normalizeDailyItems(prevDaily);
+      const baseDone = normalizeDailyItemsDone(prevDaily, baseItems);
+      const items = baseItems.filter((_, idx) => idx !== index);
+      const itemsDone = baseDone.filter((_, idx) => idx !== index);
+      const nextItems = items.length ? items : [""];
+      const nextItemsDone = nextItems.length === itemsDone.length ? itemsDone : normalizeDailyItemsDone({ ...prevDaily, itemsDone }, nextItems);
+      return {
+        ...prev,
+        daily: {
+          ...prev.daily,
+          [key]: { ...prevDaily, title: nextItems[0] ?? "", items: nextItems, itemsDone: nextItemsDone }
+        }
+      };
     });
   },
   toggleDailyItemDone: (outcomeId: string, dateISO: string, index: number) => {

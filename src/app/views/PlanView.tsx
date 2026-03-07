@@ -614,7 +614,7 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
                     />
                   </div>
 
-                  <div className="grid gap-2">
+                  <div className="grid gap-2 pl-3 sm:pl-4">
                     <div className="text-xs font-medium text-zinc-400">Weekly goals (calendar weeks)</div>
                     <div className="grid gap-2">
                       {weekStarts.map((weekStartISO) => {
@@ -669,7 +669,7 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
                                   />
                                 </div>
 
-                                <div className="grid gap-2">
+                                <div className="grid gap-2 pl-3 sm:pl-4">
                                   <div className="flex items-center justify-between gap-3">
                                     <div className="text-xs font-medium text-zinc-400">Daily commitments</div>
                                     <Button
@@ -738,11 +738,20 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
                                                       onChange={(e) => actions.setDailyItem(outcome.id, dateISO, idx, e.target.value)}
                                                       placeholder={idx === 0 ? "Daily: the smallest thing you’ll actually do." : "Another tiny task…"}
                                                       className={[
-                                                        "h-9 rounded-lg px-2 text-[13px]",
+                                                        "h-9 flex-1 rounded-lg px-2 text-[13px]",
                                                         done ? "text-zinc-400 line-through placeholder:text-zinc-600" : ""
                                                       ].join(" ")}
                                                       aria-label={`Daily task ${idx + 1}`}
                                                     />
+                                                    <button
+                                                      type="button"
+                                                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 text-sm text-zinc-400 transition hover:bg-zinc-900 hover:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-200/20"
+                                                      aria-label={`Delete daily task ${idx + 1}`}
+                                                      title="Delete daily task"
+                                                      onClick={() => actions.removeDailyItem(outcome.id, dateISO, idx)}
+                                                    >
+                                                      -
+                                                    </button>
                                                   </div>
                                                 );
                                               })}

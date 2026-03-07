@@ -1,7 +1,8 @@
 import React from "react";
 import { cn } from "./cn";
+import type { AppTab } from "../types";
 
-export type TabKey = "overview" | "plan" | "calendar" | "backup";
+export type TabKey = AppTab;
 
 type Props = {
   value: TabKey;
@@ -37,4 +38,3 @@ export default function Tabs({ value, onChange }: Props) {
     </div>
   );
 }
-

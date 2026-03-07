@@ -1,5 +1,7 @@
 export type WeekStartsOn = 0 | 1; // 0 = Sunday (US), 1 = Monday
 
+export type AppTab = "overview" | "plan" | "calendar" | "backup";
+
 export type Outcome = {
   id: string;
   title: string;
@@ -32,6 +34,8 @@ export type PersistedStateV1 = {
   ui: {
     showMonthlyObjectives: boolean;
     showWeeklyObjectives: boolean;
+    activeTab: AppTab;
+    scrollTopByTab: Partial<Record<AppTab, number>>;
   };
   outcomes: Outcome[];
   monthly: Record<string, MonthlyGoal>;
