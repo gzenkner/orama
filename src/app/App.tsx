@@ -1,7 +1,16 @@
 import React from "react";
-import type { AppTab, Outcome } from "./types";
+import type { AppTab, DayOfWeek, Outcome } from "./types";
 import { actions, useAppState } from "./store";
-import { formatShortDate, monthKeysInRange, parseISODate, toISODate } from "./date";
+import {
+  ALL_DAYS_OF_WEEK,
+  DAY_OF_WEEK_LABELS_SHORT,
+  formatDaysOfWeek,
+  formatShortDate,
+  monthKeysInRange,
+  normalizeDaysOfWeek,
+  parseISODate,
+  toISODate
+} from "./date";
 import Button from "./ui/Button";
 import Card from "./ui/Card";
 import Input from "./ui/Input";
@@ -19,6 +28,14 @@ function firstOutcomeId(outcomes: Outcome[]): string | undefined {
 
 function todayISO(): string {
   return toISODate(new Date());
+}
+
+function toggleDay(daysOfWeek: DayOfWeek[], day: DayOfWeek): DayOfWeek[] {
+  if (daysOfWeek.includes(day)) {
+    if (daysOfWeek.length === 1) return daysOfWeek;
+    return daysOfWeek.filter((value) => value !== day);
+  }
+  return [...daysOfWeek, day].sort((a, b) => a - b) as DayOfWeek[];
 }
 
 function Sidebar({ onNewOutcome }: { onNewOutcome: () => void }) {
@@ -107,6 +124,7 @@ function OutcomeModal({ open, onClose, outcome }: { open: boolean; onClose: () =
   const [notes, setNotes] = React.useState(outcome?.notes ?? "");
   const [startDate, setStartDate] = React.useState(outcome?.startDate ?? todayISO());
   const [endDate, setEndDate] = React.useState(outcome?.endDate ?? todayISO());
+  const [daysOfWeek, setDaysOfWeek] = React.useState<DayOfWeek[]>(normalizeDaysOfWeek(outcome?.daysOfWeek));
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -115,6 +133,7 @@ function OutcomeModal({ open, onClose, outcome }: { open: boolean; onClose: () =
     setNotes(outcome?.notes ?? "");
     setStartDate(outcome?.startDate ?? todayISO());
     setEndDate(outcome?.endDate ?? todayISO());
+    setDaysOfWeek(normalizeDaysOfWeek(outcome?.daysOfWeek));
     setError(null);
   }, [open, outcome]);
 
@@ -122,6 +141,7 @@ function OutcomeModal({ open, onClose, outcome }: { open: boolean; onClose: () =
 
   const canSave = React.useMemo(() => {
     if (!title.trim()) return false;
+    if (!daysOfWeek.length) return false;
     try {
       const s = parseISODate(startDate);
       const e = parseISODate(endDate);
@@ -129,15 +149,15 @@ function OutcomeModal({ open, onClose, outcome }: { open: boolean; onClose: () =
     } catch {
       return false;
     }
-  }, [title, startDate, endDate]);
+  }, [daysOfWeek.length, title, startDate, endDate]);
 
   function save() {
     if (!canSave) return;
     try {
       if (isEdit) {
-        actions.updateOutcome(outcome!.id, { title: title.trim(), notes: notes.trim(), startDate, endDate });
+        actions.updateOutcome(outcome!.id, { title: title.trim(), notes: notes.trim(), startDate, endDate, daysOfWeek });
       } else {
-        actions.addOutcome({ title: title.trim(), notes: notes.trim(), startDate, endDate });
+        actions.addOutcome({ title: title.trim(), notes: notes.trim(), startDate, endDate, daysOfWeek });
       }
       onClose();
     } catch (e) {
@@ -196,11 +216,42 @@ function OutcomeModal({ open, onClose, outcome }: { open: boolean; onClose: () =
           </div>
         </div>
 
+        <div className="grid gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs font-medium text-zinc-400">Planning days</div>
+            <div className="text-xs text-zinc-500">{formatDaysOfWeek(daysOfWeek)}</div>
+          </div>
+          <div className="grid grid-cols-7 gap-2">
+            {ALL_DAYS_OF_WEEK.map((day) => {
+              const active = daysOfWeek.includes(day);
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  className={[
+                    "rounded-xl border px-2 py-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-zinc-200/20",
+                    active
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100"
+                      : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                  ].join(" ")}
+                  aria-pressed={active}
+                  onClick={() => setDaysOfWeek((prev) => toggleDay(prev, day))}
+                >
+                  {DAY_OF_WEEK_LABELS_SHORT[day]}
+                </button>
+              );
+            })}
+          </div>
+          <div className="text-xs text-zinc-500">
+            All 7 days are selected by default. Untick the days this goal should ignore, like weekends for work goals.
+          </div>
+        </div>
+
         <Card className="p-4">
           <div className="text-sm font-semibold">How planning works here</div>
           <div className="mt-1 text-sm text-zinc-300">
             You define a time-bound outcome, then fill in a goal for each month in the range, a goal for each calendar week
-            inside those months, and a daily commitment for each day.
+            inside those months, and a daily commitment for each selected day.
           </div>
           <div className="mt-3 text-xs text-zinc-500">
             Tip: keep daily commitments tiny—something you can do even on busy days.
@@ -291,6 +342,7 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
           <div className="mt-1 text-sm text-zinc-400">
             {formatShortDate(outcome.startDate)} → {formatShortDate(outcome.endDate)}
           </div>
+          <div className="mt-1 text-xs text-zinc-500">{formatDaysOfWeek(outcome.daysOfWeek)}</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Tabs value={tab} onChange={(next: TabKey) => actions.setActiveTab(next)} />

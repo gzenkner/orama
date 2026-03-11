@@ -3,10 +3,12 @@ import type { DailyGoal, Outcome, WeekStartsOn } from "../types";
 import { actions, useAppState } from "../store";
 import {
   daysForWeekInMonth,
+  formatDaysOfWeek,
   dayNumberToISO,
   formatMonthLabel,
   formatWeekLabel,
   isoToDayNumber,
+  isDateActive,
   monthKeysInRange,
   parseISODate,
   startOfWeek,
@@ -139,8 +141,9 @@ function TimelineYardstick({
       let planned = 0;
       let total = 0;
       for (let dn = segStart; dn <= segEnd; dn++) {
-        total++;
         const iso = dayNumberToISO(dn);
+        if (!isDateActive(iso, outcome.daysOfWeek)) continue;
+        total++;
         const entry = daily[`${outcome.id}:${iso}`];
         if (entry?.done) done++;
         else if (dailyHasPlan(entry)) planned++;
@@ -150,20 +153,20 @@ function TimelineYardstick({
       const plannedRatio = total ? planned / total : 0;
       return { monthKey, segStart, segEnd, monthTitle, done, planned, total, doneRatio, plannedRatio };
     });
-  }, [daily, endDay, monthKeys, monthly, outcome.id, startDay]);
+  }, [daily, endDay, monthKeys, monthly, outcome.daysOfWeek, outcome.id, startDay]);
 
   const expandedWeekDetails = React.useMemo(() => {
     const out: Array<{ monthKey: string; weekStartISO: string; weekTitle: string; days: string[] }> = [];
     for (const wk of expandedWeekKeys) {
       const [monthKey, weekStartISO] = wk.split(":");
       if (!monthKey || !weekStartISO) continue;
-      const days = daysForWeekInMonth(weekStartISO, monthKey, outcome.startDate, outcome.endDate);
-      if (!days.length) continue;
+      const filteredDays = daysForWeekInMonth(weekStartISO, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek);
+      if (!filteredDays.length) continue;
       const weekTitle = weekly[`${outcome.id}:${monthKey}:${weekStartISO}`]?.title?.trim() ?? "";
-      out.push({ monthKey, weekStartISO, weekTitle, days });
+      out.push({ monthKey, weekStartISO, weekTitle, days: filteredDays });
     }
     return out;
-  }, [expandedWeekKeys, outcome.endDate, outcome.id, outcome.startDate, weekly]);
+  }, [expandedWeekKeys, outcome.daysOfWeek, outcome.endDate, outcome.id, outcome.startDate, weekly]);
 
   function monthLabel(monthKey: string): string {
     const [yy, mm] = monthKey.split("-").map(Number);
@@ -252,7 +255,7 @@ function TimelineYardstick({
 
         {Array.from(expandedMonths).flatMap((monthKey) => {
           const weekStarts = weekStartsForMonth(monthKey, weekStartsOn).filter(
-            (ws) => daysForWeekInMonth(ws, monthKey, outcome.startDate, outcome.endDate).length > 0
+            (ws) => daysForWeekInMonth(ws, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek).length > 0
           );
 
           return weekStarts.map((weekStartISO) => {
@@ -364,8 +367,10 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
   const daily = useAppState((s) => s.daily);
   const showMonthlyObjectives = useAppState((s) => s.ui.showMonthlyObjectives);
   const showWeeklyObjectives = useAppState((s) => s.ui.showWeeklyObjectives);
+  const [showOutcomeNotes, setShowOutcomeNotes] = React.useState(false);
 
   const monthKeys = React.useMemo(() => monthKeysInRange(outcome.startDate, outcome.endDate), [outcome.startDate, outcome.endDate]);
+  const outcomeNotes = outcome.notes.trim();
 
   const [focusedMonth, setFocusedMonth] = React.useState<string | null>(null);
 
@@ -385,6 +390,10 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
     setExpandedWeekKeys(weekKey ? new Set([weekKey]) : new Set());
     setFocusedMonth(monthKey);
   }, [outcome.id, outcome.startDate, outcome.endDate, monthKeys, weekStartsOn]);
+
+  React.useEffect(() => {
+    setShowOutcomeNotes(false);
+  }, [outcome.id]);
 
   const activeMonthKey = React.useMemo(() => {
     if (focusedMonth && monthKeys.includes(focusedMonth)) return focusedMonth;
@@ -456,7 +465,7 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
     let done = 0;
     let total = 0;
     for (const ws of weekStarts) {
-      const days = daysForWeekInMonth(ws, monthKey, outcome.startDate, outcome.endDate);
+      const days = daysForWeekInMonth(ws, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek);
       total += days.length;
       for (const d of days) if (daily[`${outcome.id}:${d}`]?.done) done++;
     }
@@ -472,6 +481,7 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
             <div className="mt-1 text-sm text-zinc-400">
               Fill the plan top-down: outcome → month focus → week focus → daily commitment.
             </div>
+            <div className="mt-2 text-xs text-zinc-500">Active days: {formatDaysOfWeek(outcome.daysOfWeek)}</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -501,6 +511,7 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
                 const end = parseISODate(outcome.endDate);
                 const t = parseISODate(today);
                 if (t.getTime() < start.getTime() || t.getTime() > end.getTime()) return;
+                if (!isDateActive(today, outcome.daysOfWeek)) return;
                 const monthKey = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`;
                 setFocusedMonth(monthKey);
                 setExpandedMonths((prev) => new Set([...prev, monthKey]));
@@ -547,6 +558,23 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
           </div>
         </div>
 
+        {outcomeNotes ? (
+          <div className="mt-4 rounded-2xl border border-zinc-900 bg-zinc-950/30 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-medium text-zinc-400">Outcome description</div>
+                <div className="mt-1 text-xs text-zinc-500">Your high-level intent for this outcome.</div>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => setShowOutcomeNotes((prev) => !prev)} aria-expanded={showOutcomeNotes}>
+                {showOutcomeNotes ? "Hide description" : "Show description"}
+              </Button>
+            </div>
+            {showOutcomeNotes ? (
+              <div className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-200">{outcomeNotes}</div>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="mt-4">
           <TimelineYardstick
             outcome={outcome}
@@ -571,7 +599,7 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
           const monthTitle = monthly[monthStoreKey]?.title ?? "";
           const { done, total } = monthProgress(monthKey);
           const weekStarts = weekStartsForMonth(monthKey, weekStartsOn).filter(
-            (ws) => daysForWeekInMonth(ws, monthKey, outcome.startDate, outcome.endDate).length > 0
+            (ws) => daysForWeekInMonth(ws, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek).length > 0
           );
 
           return (
@@ -620,7 +648,13 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
                       {weekStarts.map((weekStartISO) => {
                         const weekKey = `${outcome.id}:${monthKey}:${weekStartISO}`;
                         const weekTitle = weekly[weekKey]?.title ?? "";
-                        const weekDays = daysForWeekInMonth(weekStartISO, monthKey, outcome.startDate, outcome.endDate);
+                        const weekDays = daysForWeekInMonth(
+                          weekStartISO,
+                          monthKey,
+                          outcome.startDate,
+                          outcome.endDate,
+                          outcome.daysOfWeek
+                        );
                         const expandedWeek = expandedWeekKeys.has(`${monthKey}:${weekStartISO}`);
                         const expandedWeekKey = `${monthKey}:${weekStartISO}`;
 

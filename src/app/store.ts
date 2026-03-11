@@ -1,5 +1,6 @@
 import React from "react";
 import type { AppTab, DailyGoal, MonthlyGoal, Outcome, PersistedStateV1, WeekStartsOn, WeeklyGoal } from "./types";
+import { normalizeDaysOfWeek } from "./date";
 
 const STORAGE_KEY = "goals_app_state_v1";
 
@@ -36,6 +37,13 @@ function defaultState(): State {
   };
 }
 
+function normalizeOutcome(outcome: Omit<Outcome, "daysOfWeek"> & { daysOfWeek?: number[] }): Outcome {
+  return {
+    ...outcome,
+    daysOfWeek: normalizeDaysOfWeek(outcome.daysOfWeek)
+  };
+}
+
 function normalizeDailyItems(goal: DailyGoal | undefined): string[] {
   if (!goal) return [""];
   if (Array.isArray(goal.items) && goal.items.length) return goal.items;
@@ -60,7 +68,7 @@ function readState(): State {
         ...defaultState().ui,
         ...(parsed as Partial<State>).ui
       },
-      outcomes: Array.isArray(parsed.outcomes) ? parsed.outcomes : []
+      outcomes: Array.isArray(parsed.outcomes) ? parsed.outcomes.map((outcome) => normalizeOutcome(outcome)) : []
     };
   } catch {
     return defaultState();
@@ -124,16 +132,17 @@ export const actions = {
   selectOutcome: (id: string) => {
     store.set((prev) => ({ ...prev, selectedOutcomeId: id }));
   },
-  addOutcome: (input: { title: string; notes?: string; startDate: string; endDate: string }) => {
+  addOutcome: (input: { title: string; notes?: string; startDate: string; endDate: string; daysOfWeek: number[] }) => {
     const now = new Date().toISOString();
-    const outcome: Outcome = {
+    const outcome = normalizeOutcome({
       id: safeUUID(),
       title: input.title.trim(),
       notes: (input.notes ?? "").trim(),
       startDate: input.startDate,
       endDate: input.endDate,
+      daysOfWeek: input.daysOfWeek,
       createdAt: now
-    };
+    });
     store.set((prev) => ({
       ...prev,
       outcomes: [outcome, ...prev.outcomes],
@@ -141,10 +150,10 @@ export const actions = {
     }));
     return outcome.id;
   },
-  updateOutcome: (id: string, patch: Partial<Pick<Outcome, "title" | "notes" | "startDate" | "endDate">>) => {
+  updateOutcome: (id: string, patch: Partial<Pick<Outcome, "title" | "notes" | "startDate" | "endDate" | "daysOfWeek">>) => {
     store.set((prev) => ({
       ...prev,
-      outcomes: prev.outcomes.map((o) => (o.id === id ? { ...o, ...patch } : o))
+      outcomes: prev.outcomes.map((o) => (o.id === id ? normalizeOutcome({ ...o, ...patch }) : o))
     }));
   },
   deleteOutcome: (id: string) => {
@@ -274,7 +283,7 @@ export const actions = {
         ...defaultState().ui,
         ...(parsed as Partial<State>).ui
       },
-      outcomes: Array.isArray(parsed.outcomes) ? parsed.outcomes : []
+      outcomes: Array.isArray(parsed.outcomes) ? parsed.outcomes.map((outcome) => normalizeOutcome(outcome)) : []
     }));
   },
   resetAll: () => {

@@ -1,4 +1,29 @@
-import type { WeekStartsOn } from "./types";
+import type { DayOfWeek, WeekStartsOn } from "./types";
+
+export const ALL_DAYS_OF_WEEK: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
+export const DAY_OF_WEEK_LABELS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+export function normalizeDaysOfWeek(daysOfWeek?: readonly number[]): DayOfWeek[] {
+  if (!Array.isArray(daysOfWeek)) return [...ALL_DAYS_OF_WEEK];
+  const normalized = Array.from(
+    new Set(daysOfWeek.filter((day): day is DayOfWeek => Number.isInteger(day) && day >= 0 && day <= 6))
+  ).sort((a, b) => a - b);
+  return normalized.length ? normalized : [...ALL_DAYS_OF_WEEK];
+}
+
+export function isDayOfWeekActive(dayOfWeek: number, daysOfWeek: readonly DayOfWeek[]): boolean {
+  return daysOfWeek.includes(dayOfWeek as DayOfWeek);
+}
+
+export function isDateActive(dateISO: string, daysOfWeek: readonly DayOfWeek[]): boolean {
+  return isDayOfWeekActive(parseISODate(dateISO).getDay(), daysOfWeek);
+}
+
+export function formatDaysOfWeek(daysOfWeek: readonly DayOfWeek[]): string {
+  const normalized = normalizeDaysOfWeek(daysOfWeek);
+  if (normalized.length === ALL_DAYS_OF_WEEK.length) return "Every day";
+  return normalized.map((day) => DAY_OF_WEEK_LABELS_SHORT[day]).join(", ");
+}
 
 export function parseISODate(date: string): Date {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
@@ -122,6 +147,18 @@ export function monthKeysInRange(startISO: string, endISO: string): string[] {
   return out;
 }
 
+export function dateISOsInRange(startISO: string, endISO: string, daysOfWeek?: readonly DayOfWeek[]): string[] {
+  const startDay = isoToDayNumber(startISO);
+  const endDay = isoToDayNumber(endISO);
+  const out: string[] = [];
+  for (let dayNumber = startDay; dayNumber <= endDay; dayNumber++) {
+    const dayOfWeek = new Date(dayNumber * 86400000).getUTCDay();
+    if (daysOfWeek && !isDayOfWeekActive(dayOfWeek, daysOfWeek)) continue;
+    out.push(dayNumberToISO(dayNumber));
+  }
+  return out;
+}
+
 export function weekStartsForMonth(monthKey: string, weekStartsOn: WeekStartsOn): string[] {
   const monthStart = monthKeyToDate(monthKey);
   const monthEnd = endOfMonth(monthStart);
@@ -138,7 +175,8 @@ export function daysForWeekInMonth(
   weekStartISO: string,
   monthKey: string,
   rangeStartISO: string,
-  rangeEndISO: string
+  rangeEndISO: string,
+  daysOfWeek?: readonly DayOfWeek[]
 ): string[] {
   const weekStart = parseISODate(weekStartISO);
   const monthStart = monthKeyToDate(monthKey);
@@ -152,6 +190,7 @@ export function daysForWeekInMonth(
     if (!isSameMonth(d, monthStart)) continue;
     if (!isWithinInclusive(d, rangeStart, rangeEnd)) continue;
     if (!isWithinInclusive(d, monthStart, monthEnd)) continue;
+    if (daysOfWeek && !isDayOfWeekActive(d.getDay(), daysOfWeek)) continue;
     out.push(toISODate(d));
   }
   return out;

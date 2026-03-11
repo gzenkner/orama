@@ -2,8 +2,11 @@ import React from "react";
 import type { DailyGoal, Outcome, WeekStartsOn } from "../types";
 import { actions, useAppState } from "../store";
 import {
+  dateISOsInRange,
+  formatDaysOfWeek,
   formatMonthLabel,
   formatShortDate,
+  isDateActive,
   monthKeyFromDate,
   parseISODate,
   startOfWeek,
@@ -47,6 +50,7 @@ function streakInfo(outcome: Outcome, daily: Record<string, DailyGoal>): { curre
   let current = 0;
   for (let d = new Date(until); d.getTime() >= start.getTime(); d.setDate(d.getDate() - 1)) {
     const iso = toISODate(d);
+    if (!isDateActive(iso, outcome.daysOfWeek)) continue;
     const entry = daily[`${outcome.id}:${iso}`];
     if (entry?.done) current++;
     else break;
@@ -56,6 +60,7 @@ function streakInfo(outcome: Outcome, daily: Record<string, DailyGoal>): { curre
   let run = 0;
   for (let d = new Date(start); d.getTime() <= end.getTime(); d.setDate(d.getDate() + 1)) {
     const iso = toISODate(d);
+    if (!isDateActive(iso, outcome.daysOfWeek)) continue;
     const entry = daily[`${outcome.id}:${iso}`];
     if (entry?.done) {
       run++;
@@ -121,7 +126,8 @@ function YearCalendar({
                   if (dayNum < 1 || dayNum > daysInMonth) return <div key={idx} className="h-7 rounded-lg" />;
                   const dateISO = toISODate(new Date(year, monthIndex, dayNum));
                   const inRange = isoInRange(dateISO, outcome.startDate, outcome.endDate);
-                  const state = dayState(outcome.id, dateISO, daily, inRange);
+                  const active = inRange && isDateActive(dateISO, outcome.daysOfWeek);
+                  const state = dayState(outcome.id, dateISO, daily, active);
 
                   const base = "h-7 w-full rounded-lg border transition";
                   const styles: Record<DayState, string> = {
@@ -135,7 +141,7 @@ function YearCalendar({
                     <button
                       key={idx}
                       className={cn(base, styles[state])}
-                      disabled={!inRange}
+                      disabled={!active}
                       onClick={() => onSelectDay(dateISO)}
                       title={formatShortDate(dateISO)}
                     >
@@ -290,21 +296,15 @@ export default function CalendarView({ outcome, weekStartsOn }: { outcome: Outco
   const { current, best } = React.useMemo(() => streakInfo(outcome, daily), [outcome, daily]);
 
   const totalDays = React.useMemo(() => {
-    const start = parseISODate(outcome.startDate);
-    const end = parseISODate(outcome.endDate);
-    return Math.floor((end.getTime() - start.getTime()) / (24 * 3600 * 1000)) + 1;
-  }, [outcome.startDate, outcome.endDate]);
+    return dateISOsInRange(outcome.startDate, outcome.endDate, outcome.daysOfWeek).length;
+  }, [outcome.daysOfWeek, outcome.endDate, outcome.startDate]);
 
   const doneDays = React.useMemo(() => {
-    let count = 0;
-    const start = parseISODate(outcome.startDate);
-    const end = parseISODate(outcome.endDate);
-    for (let d = new Date(start); d.getTime() <= end.getTime(); d.setDate(d.getDate() + 1)) {
-      const iso = toISODate(d);
-      if (daily[`${outcome.id}:${iso}`]?.done) count++;
-    }
-    return count;
-  }, [daily, outcome.id, outcome.startDate, outcome.endDate]);
+    return dateISOsInRange(outcome.startDate, outcome.endDate, outcome.daysOfWeek).reduce(
+      (count, iso) => count + (daily[`${outcome.id}:${iso}`]?.done ? 1 : 0),
+      0
+    );
+  }, [daily, outcome.daysOfWeek, outcome.endDate, outcome.id, outcome.startDate]);
 
   return (
     <div className="grid gap-4">
@@ -313,6 +313,7 @@ export default function CalendarView({ outcome, weekStartsOn }: { outcome: Outco
           <div>
             <div className="text-sm font-semibold">Consistency calendar</div>
             <div className="mt-1 text-sm text-zinc-400">See the whole year at a glance. Green = done.</div>
+            <div className="mt-2 text-xs text-zinc-500">Active days: {formatDaysOfWeek(outcome.daysOfWeek)}</div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -344,6 +345,7 @@ export default function CalendarView({ outcome, weekStartsOn }: { outcome: Outco
               onClick={() => {
                 const t = toISODate(new Date());
                 if (!isoInRange(t, outcome.startDate, outcome.endDate)) return;
+                if (!isDateActive(t, outcome.daysOfWeek)) return;
                 setSelectedDay(t);
                 setDayOpen(true);
               }}

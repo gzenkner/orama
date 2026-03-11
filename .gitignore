@@ -5,6 +5,7 @@ dist/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
+src-tauri/target/
 
 ### Logs
 *.log

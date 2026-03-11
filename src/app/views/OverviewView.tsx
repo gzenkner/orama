@@ -3,7 +3,9 @@ import type { Outcome, WeekStartsOn } from "../types";
 import { actions, useAppState } from "../store";
 import {
   addDays,
+  dateISOsInRange,
   formatShortDate,
+  isDateActive,
   monthKeyFromDate,
   parseISODate,
   startOfWeek,
@@ -19,19 +21,13 @@ function isoInRange(dateISO: string, startISO: string, endISO: string): boolean 
   return d >= parseISODate(startISO).getTime() && d <= parseISODate(endISO).getTime();
 }
 
-function daysBetweenInclusive(startISO: string, endISO: string): number {
-  const start = parseISODate(startISO).getTime();
-  const end = parseISODate(endISO).getTime();
-  return Math.floor((end - start) / (24 * 3600 * 1000)) + 1;
-}
-
 export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outcome; weekStartsOn: WeekStartsOn }) {
   const monthly = useAppState((s) => s.monthly);
   const weekly = useAppState((s) => s.weekly);
   const daily = useAppState((s) => s.daily);
 
   const today = toISODate(new Date());
-  const inRange = isoInRange(today, outcome.startDate, outcome.endDate);
+  const inRange = isoInRange(today, outcome.startDate, outcome.endDate) && isDateActive(today, outcome.daysOfWeek);
   const todayEntry = daily[`${outcome.id}:${today}`] ?? { title: "", done: false };
   const todayItems =
     Array.isArray(todayEntry.items) && todayEntry.items.length ? todayEntry.items : [todayEntry.title ?? ""];
@@ -42,16 +38,20 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
   const monthTitle = monthly[`${outcome.id}:${monthKey}`]?.title ?? "";
   const weekTitle = weekly[`${outcome.id}:${monthKey}:${weekStart}`]?.title ?? "";
 
-  const total = daysBetweenInclusive(outcome.startDate, outcome.endDate);
-  const done = Object.entries(daily).reduce((acc, [k, v]) => (k.startsWith(`${outcome.id}:`) && v.done ? acc + 1 : acc), 0);
+  const activeDates = React.useMemo(
+    () => dateISOsInRange(outcome.startDate, outcome.endDate, outcome.daysOfWeek),
+    [outcome.daysOfWeek, outcome.endDate, outcome.startDate]
+  );
+  const total = activeDates.length;
+  const done = activeDates.reduce((acc, dateISO) => acc + (daily[`${outcome.id}:${dateISO}`]?.done ? 1 : 0), 0);
   const progress = total ? done / total : 0;
 
   const weekDays = React.useMemo(
     () =>
       Array.from({ length: 7 }, (_, i) => toISODate(addDays(parseISODate(weekStart), i))).filter((d) =>
-        isoInRange(d, outcome.startDate, outcome.endDate)
+        isoInRange(d, outcome.startDate, outcome.endDate) && isDateActive(d, outcome.daysOfWeek)
       ),
-    [weekStart, outcome.startDate, outcome.endDate]
+    [weekStart, outcome.daysOfWeek, outcome.startDate, outcome.endDate]
   );
   const weekDone = weekDays.reduce((acc, d) => acc + (daily[`${outcome.id}:${d}`]?.done ? 1 : 0), 0);
 
@@ -166,7 +166,7 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
                 {todayEntry.done ? "Done (undo)" : "Mark done"}
               </Button>
               <div className="text-xs text-zinc-500">
-                {inRange ? "Consistency beats intensity." : "Pick a date inside your outcome range."}
+                {inRange ? "Consistency beats intensity." : "Today is outside this goal's active date range or selected weekdays."}
               </div>
             </div>
           </div>
