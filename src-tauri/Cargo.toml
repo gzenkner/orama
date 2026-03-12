@@ -1,7 +1,7 @@
 [package]
-name = "goals_app"
+name = "orama"
 version = "0.1.0"
-description = "Goals desktop app"
+description = "Orama desktop app"
 authors = ["Gabriel Zenkner"]
 edition = "2021"
 
@@ -12,4 +12,3 @@ tauri-build = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }
-

@@ -1,8 +1,10 @@
 import React from "react";
 import type { AppTab, DailyGoal, MonthlyGoal, Outcome, PersistedStateV1, WeekStartsOn, WeeklyGoal } from "./types";
 import { normalizeDaysOfWeek } from "./date";
+import { nextOutcomeThemeId, normalizeOutcomeTheme } from "./theme";
 
-const STORAGE_KEY = "goals_app_state_v1";
+const STORAGE_KEY = "orama_state_v1";
+const LEGACY_STORAGE_KEYS = ["goals_app_state_v1"];
 
 type State = PersistedStateV1;
 
@@ -13,6 +15,14 @@ type Store = {
   set: (updater: (prev: State) => State) => void;
   subscribe: (listener: Listener) => () => void;
 };
+
+function normalizeActiveTab(activeTab: unknown): AppTab {
+  if (activeTab === "backup") return "settings";
+  if (activeTab === "overview" || activeTab === "plan" || activeTab === "calendar" || activeTab === "settings") {
+    return activeTab;
+  }
+  return "overview";
+}
 
 function safeUUID(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
@@ -28,6 +38,7 @@ function defaultState(): State {
       showMonthlyObjectives: false,
       showWeeklyObjectives: false,
       activeTab: "overview",
+      themeMode: "white",
       scrollTopByTab: {}
     },
     outcomes: [],
@@ -57,7 +68,7 @@ function normalizeDailyItemsDone(goal: DailyGoal | undefined, items: string[]): 
 
 function readState(): State {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) ?? LEGACY_STORAGE_KEYS.map((key) => localStorage.getItem(key)).find(Boolean);
     if (!raw) return defaultState();
     const parsed = JSON.parse(raw) as State;
     if (parsed?.version !== 1) return defaultState();
@@ -66,9 +77,17 @@ function readState(): State {
       ...parsed,
       ui: {
         ...defaultState().ui,
-        ...(parsed as Partial<State>).ui
+        ...(parsed as Partial<State>).ui,
+        activeTab: normalizeActiveTab((parsed as Partial<State>).ui?.activeTab)
       },
-      outcomes: Array.isArray(parsed.outcomes) ? parsed.outcomes.map((outcome) => normalizeOutcome(outcome)) : []
+      outcomes: Array.isArray(parsed.outcomes)
+        ? parsed.outcomes.map((outcome, index) =>
+            normalizeOutcome({
+              ...outcome,
+              themeId: normalizeOutcomeTheme((outcome as Partial<Outcome>).themeId, index)
+            })
+          )
+        : []
     };
   } catch {
     return defaultState();
@@ -111,6 +130,9 @@ export const actions = {
   setWeekStartsOn: (weekStartsOn: WeekStartsOn) => {
     store.set((prev) => ({ ...prev, weekStartsOn }));
   },
+  setThemeMode: (themeMode: State["ui"]["themeMode"]) => {
+    store.set((prev) => ({ ...prev, ui: { ...prev.ui, themeMode } }));
+  },
   toggleShowMonthlyObjectives: () => {
     store.set((prev) => ({ ...prev, ui: { ...prev.ui, showMonthlyObjectives: !prev.ui.showMonthlyObjectives } }));
   },
@@ -134,6 +156,7 @@ export const actions = {
   },
   addOutcome: (input: { title: string; notes?: string; startDate: string; endDate: string; daysOfWeek: number[] }) => {
     const now = new Date().toISOString();
+    const themeId = nextOutcomeThemeId(store.get().outcomes.map((outcome) => outcome.themeId));
     const outcome = normalizeOutcome({
       id: safeUUID(),
       title: input.title.trim(),
@@ -141,6 +164,7 @@ export const actions = {
       startDate: input.startDate,
       endDate: input.endDate,
       daysOfWeek: input.daysOfWeek,
+      themeId,
       createdAt: now
     });
     store.set((prev) => ({
@@ -281,9 +305,17 @@ export const actions = {
       ...parsed,
       ui: {
         ...defaultState().ui,
-        ...(parsed as Partial<State>).ui
+        ...(parsed as Partial<State>).ui,
+        activeTab: normalizeActiveTab((parsed as Partial<State>).ui?.activeTab)
       },
-      outcomes: Array.isArray(parsed.outcomes) ? parsed.outcomes.map((outcome) => normalizeOutcome(outcome)) : []
+      outcomes: Array.isArray(parsed.outcomes)
+        ? parsed.outcomes.map((outcome, index) =>
+            normalizeOutcome({
+              ...outcome,
+              themeId: normalizeOutcomeTheme((outcome as Partial<Outcome>).themeId, index)
+            })
+          )
+        : []
     }));
   },
   resetAll: () => {

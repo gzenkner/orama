@@ -35,26 +35,27 @@ export default function Modal({ open, onClose, title, children, footer, classNam
     <dialog
       ref={ref}
       className={cn(
-        "w-[min(720px,92vw)] rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl backdrop:bg-black/60",
+        "app-modal w-[min(720px,92vw)] rounded-[0.95rem]",
         className
       )}
       onClose={onClose}
     >
-      <div className="flex items-start justify-between gap-4 border-b border-zinc-800 px-5 py-4">
+      <div className="flex items-start justify-between gap-4 border-b border-[color:var(--app-border)] px-5 py-4">
         <div>
-          <div className="text-base font-semibold">{title}</div>
-          <div className="mt-1 text-xs text-zinc-400">Outcome → monthly → weekly → daily</div>
+          <div className="font-display text-lg font-semibold">{title}</div>
+          <div className="mt-1 text-xs app-muted">{"Outcome -> monthly -> weekly -> daily"}</div>
         </div>
         <button
-          className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs hover:bg-zinc-800/70"
+          className="app-ghost-outline rounded-[0.45rem] px-2 py-1 text-xs transition"
           onClick={onClose}
         >
           Esc
         </button>
       </div>
       <div className="px-5 py-4">{children}</div>
-      {footer ? <div className="flex items-center justify-end gap-2 border-t border-zinc-800 px-5 py-4">{footer}</div> : null}
+      {footer ? (
+        <div className="flex items-center justify-end gap-2 border-t border-[color:var(--app-border)] px-5 py-4">{footer}</div>
+      ) : null}
     </dialog>
   );
 }
-

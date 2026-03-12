@@ -2,7 +2,11 @@ export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday ... 6 = Saturda
 
 export type WeekStartsOn = 0 | 1; // 0 = Sunday (US), 1 = Monday
 
-export type AppTab = "overview" | "plan" | "calendar" | "backup";
+export type AppTab = "overview" | "plan" | "calendar" | "settings";
+
+export type AppThemeMode = "white" | "black";
+
+export type OutcomeThemeId = "apricot" | "sage" | "sky" | "lavender" | "butter" | "rose";
 
 export type Outcome = {
   id: string;
@@ -11,6 +15,7 @@ export type Outcome = {
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
   daysOfWeek: DayOfWeek[];
+  themeId: OutcomeThemeId;
   createdAt: string; // ISO
 };
 
@@ -38,6 +43,7 @@ export type PersistedStateV1 = {
     showMonthlyObjectives: boolean;
     showWeeklyObjectives: boolean;
     activeTab: AppTab;
+    themeMode: AppThemeMode;
     scrollTopByTab: Partial<Record<AppTab, number>>;
   };
   outcomes: Outcome[];

@@ -9,29 +9,30 @@ type Props = {
   onChange: (next: TabKey) => void;
 };
 
-const labels: Record<TabKey, string> = {
-  overview: "Overview",
-  plan: "Plan",
-  calendar: "Calendar",
-  backup: "Backup"
+export const TAB_META: Record<TabKey, { label: string; hint: string }> = {
+  overview: { label: "Overview", hint: "today and progress" },
+  plan: { label: "Plan", hint: "month to day" },
+  calendar: { label: "Calendar", hint: "whole-range check-ins" },
+  settings: { label: "Settings", hint: "theme, prefs, and backup" }
 };
 
 export default function Tabs({ value, onChange }: Props) {
-  const keys = Object.keys(labels) as TabKey[];
+  const keys = Object.keys(TAB_META) as TabKey[];
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="grid w-full grid-cols-2 gap-2 lg:grid-cols-4">
       {keys.map((k) => {
         const active = k === value;
         return (
           <button
             key={k}
             className={cn(
-              "rounded-xl border px-3 py-2 text-sm transition",
-              active ? "border-zinc-700 bg-zinc-900" : "border-zinc-800 bg-transparent hover:bg-zinc-900"
+              "app-tab rounded-[0.7rem] px-3 py-3 text-left transition",
+              active ? "app-tab-active" : "hover:bg-[color:var(--app-nav-hover)]"
             )}
             onClick={() => onChange(k)}
           >
-            {labels[k]}
+            <div className="text-sm font-semibold">{TAB_META[k].label}</div>
+            <div className="mt-1 text-[11px] app-muted">{TAB_META[k].hint}</div>
           </button>
         );
       })}

@@ -12,12 +12,14 @@ export default function BackupView() {
 
   return (
     <div className="grid gap-4">
-      <Card className="p-4">
+      <Card className="app-card-soft rounded-[0.95rem] p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-sm font-semibold">Backup</div>
-            <div className="mt-1 text-sm text-zinc-400">Export/import your data as JSON (stored locally in your browser).</div>
+            <div className="app-kicker">Backup</div>
+            <div className="font-display mt-2 text-lg font-semibold">Export or restore your local data.</div>
+            <div className="mt-2 text-sm leading-6 app-muted">Everything stays in local storage unless you manually copy it out.</div>
           </div>
+
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={async () => {
@@ -40,19 +42,20 @@ export default function BackupView() {
         </div>
       </Card>
 
-      <Card className="p-4">
-        <div className="text-xs font-medium text-zinc-400">Export</div>
-        <div className="mt-2">
-          <Textarea value={exportRaw} readOnly className="font-mono text-xs" />
+      <Card className="rounded-[0.85rem] p-5">
+        <div className="app-kicker">Export</div>
+        <div className="mt-3">
+          <Textarea value={exportRaw} readOnly className="min-h-64 font-mono text-xs" />
         </div>
       </Card>
 
-      <Card className="p-4">
+      <Card className="rounded-[0.85rem] p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-medium text-zinc-400">Import</div>
-            <div className="mt-1 text-sm text-zinc-400">Paste a previous export JSON to restore.</div>
+            <div className="app-kicker">Import</div>
+            <div className="mt-2 text-sm leading-6 app-muted">Paste a previous JSON export to restore the workspace.</div>
           </div>
+
           <Button
             variant="primary"
             onClick={() => {
@@ -69,12 +72,13 @@ export default function BackupView() {
             Import
           </Button>
         </div>
-        <div className="mt-2">
-          <Textarea value={importRaw} onChange={(e) => setImportRaw(e.target.value)} placeholder="{ ... }" className="font-mono text-xs" />
+
+        <div className="mt-3">
+          <Textarea value={importRaw} onChange={(e) => setImportRaw(e.target.value)} placeholder="{ ... }" className="min-h-64 font-mono text-xs" />
         </div>
-        {error ? <div className="mt-2 text-sm text-red-300">{error}</div> : null}
+
+        {error ? <div className="mt-3 text-sm text-red-500">{error}</div> : null}
       </Card>
     </div>
   );
 }
-

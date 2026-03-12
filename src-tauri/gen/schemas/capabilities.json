@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default capability for the Goals desktop window.","local":true,"windows":["main"],"permissions":["core:default"]}}
+{"default":{"identifier":"default","description":"Default capability for the Orama desktop window.","local":true,"windows":["main"],"permissions":["core:default"]}}

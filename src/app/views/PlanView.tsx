@@ -19,6 +19,7 @@ import Button from "../ui/Button";
 import Card from "../ui/Card";
 import Input from "../ui/Input";
 import Progress from "../ui/Progress";
+import { getOutcomeTheme } from "../theme";
 
 function dailyHasPlan(entry: DailyGoal | undefined): boolean {
   if (!entry) return false;
@@ -72,7 +73,7 @@ function Chevron({ open }: { open: boolean }) {
       viewBox="0 0 20 20"
       aria-hidden="true"
       className={[
-        "h-4 w-4 shrink-0 text-zinc-400 transition-transform",
+        "h-4 w-4 shrink-0 text-[color:var(--app-muted)] transition-transform",
         open ? "rotate-0" : "-rotate-90"
       ].join(" ")}
     >
@@ -109,6 +110,7 @@ function TimelineYardstick({
   onJumpWeek: (monthKey: string, weekStartISO: string) => void;
   onJumpDay: (monthKey: string, weekStartISO: string, dateISO: string) => void;
 }) {
+  const theme = getOutcomeTheme(outcome.themeId);
   const startDay = isoToDayNumber(outcome.startDate);
   const endDay = isoToDayNumber(outcome.endDate);
   const span = Math.max(1, endDay - startDay);
@@ -174,18 +176,18 @@ function TimelineYardstick({
     return d.toLocaleString(undefined, { month: "short" });
   }
 
-  const base = "#18181b"; // zinc-900
-  const doneColor = "#34d399"; // emerald-400
-  const plannedColor = "#fbbf24"; // amber-400
+  const base = theme.soft;
+  const doneColor = theme.accentStrong;
+  const plannedColor = theme.accent;
 
   return (
-    <div className="rounded-2xl border border-zinc-900 bg-zinc-950/20 p-3">
+    <div className="rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] p-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <div className="text-xs font-medium text-zinc-400">Timeline yardstick</div>
-          <div className="mt-1 text-xs text-zinc-500">It “zooms in” as you expand months/weeks.</div>
+          <div className="app-kicker">Timeline yardstick</div>
+          <div className="mt-1 text-xs app-muted">It zooms in as you expand months and weeks.</div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-500">
+        <div className="flex flex-wrap items-center gap-3 text-[11px] app-muted">
           <div className="flex items-center gap-2">
             <span className="inline-block h-2 w-2 rounded-full" style={{ background: plannedColor }} /> Planned
           </div>
@@ -196,7 +198,7 @@ function TimelineYardstick({
       </div>
 
       <svg className="mt-3 h-28 w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Timeline yardstick">
-        <line x1={pad} y1={y} x2={width - pad} y2={y} stroke="#27272a" strokeWidth={2} />
+        <line x1={pad} y1={y} x2={width - pad} y2={y} stroke="var(--app-border)" strokeWidth={2} />
 
         {monthSegments.map((m) => {
           const x1 = xForDay(m.segStart);
@@ -209,21 +211,21 @@ function TimelineYardstick({
 
           return (
             <g key={m.monthKey}>
-              <line
-                x1={x1}
-                y1={y}
-                x2={x1 + len}
-                y2={y}
+                <line
+                  x1={x1}
+                  y1={y}
+                  x2={x1 + len}
+                  y2={y}
                 stroke={doneStroke}
                 strokeWidth={12}
                 strokeLinecap="round"
                 style={{ cursor: "pointer" }}
                 onClick={() => onJumpMonth(m.monthKey)}
-              >
-                <title>
-                  {m.monthKey} • {m.done}/{m.total} done • {m.planned}/{m.total} planned
-                </title>
-              </line>
+                >
+                  <title>
+                  {m.monthKey} - {m.done}/{m.total} done - {m.planned}/{m.total} planned
+                  </title>
+                </line>
 
               {m.planned > 0 ? (
                 <line
@@ -239,13 +241,13 @@ function TimelineYardstick({
               ) : null}
 
               {wideEnough ? (
-                <text x={labelX} y={y - 22} textAnchor="middle" fill="#a1a1aa" fontSize={12}>
+                <text x={labelX} y={y - 22} textAnchor="middle" fill="var(--app-subtle)" fontSize={12}>
                   {monthLabel(m.monthKey)}
                 </text>
               ) : null}
 
               {m.monthTitle ? (
-                <circle cx={labelX} cy={y - 10} r={4} fill="#e4e4e7">
+                <circle cx={labelX} cy={y - 10} r={4} fill="var(--app-text)">
                   <title>Monthly goal: {m.monthTitle}</title>
                 </circle>
               ) : null}
@@ -263,7 +265,7 @@ function TimelineYardstick({
             if (dn < startDay || dn > endDay) return null;
             const x = xForDay(dn);
             const title = weekly[`${outcome.id}:${monthKey}:${weekStartISO}`]?.title?.trim() ?? "";
-            const tick = title ? plannedColor : "#3f3f46";
+            const tick = title ? plannedColor : "var(--app-border)";
             return (
               <g key={`${monthKey}:${weekStartISO}`}>
                 <line
@@ -291,7 +293,7 @@ function TimelineYardstick({
             const entry = daily[`${outcome.id}:${dateISO}`];
             const isDone = Boolean(entry?.done);
             const isPlanned = dailyHasPlan(entry);
-            const fill = isDone ? doneColor : isPlanned ? plannedColor : "#3f3f46";
+            const fill = isDone ? doneColor : isPlanned ? plannedColor : "var(--app-border)";
             const cy = y - 34 - (idx % 2) * 10;
             return (
               <circle
@@ -304,7 +306,7 @@ function TimelineYardstick({
                 onClick={() => onJumpDay(w.monthKey, w.weekStartISO, dateISO)}
               >
                 <title>
-                  {dateISO} • {isDone ? "done" : isPlanned ? "planned" : "unplanned"} • {entry?.title?.trim() ?? ""}
+                  {dateISO} - {isDone ? "done" : isPlanned ? "planned" : "unplanned"} - {entry?.title?.trim() ?? ""}
                 </title>
               </circle>
             );
@@ -313,8 +315,16 @@ function TimelineYardstick({
 
         {hasToday ? (
           <g>
-            <line x1={xForDay(todayDay)} y1={y - 36} x2={xForDay(todayDay)} y2={y + 28} stroke="#e4e4e7" strokeWidth={2} opacity={0.7} />
-            <text x={xForDay(todayDay)} y={y + 46} textAnchor="middle" fill="#e4e4e7" fontSize={11}>
+            <line
+              x1={xForDay(todayDay)}
+              y1={y - 36}
+              x2={xForDay(todayDay)}
+              y2={y + 28}
+              stroke="var(--app-text)"
+              strokeWidth={2}
+              opacity={0.7}
+            />
+            <text x={xForDay(todayDay)} y={y + 46} textAnchor="middle" fill="var(--app-text)" fontSize={11}>
               Today
             </text>
           </g>
@@ -329,7 +339,7 @@ function Arrow({ dir }: { dir: "left" | "right" }) {
     <svg
       viewBox="0 0 20 20"
       aria-hidden="true"
-      className={["h-4 w-4 shrink-0 text-zinc-200", dir === "left" ? "" : "rotate-180"].join(" ")}
+      className={["h-4 w-4 shrink-0 text-[color:var(--app-text)]", dir === "left" ? "" : "rotate-180"].join(" ")}
     >
       <path
         fill="currentColor"
@@ -340,10 +350,11 @@ function Arrow({ dir }: { dir: "left" | "right" }) {
 }
 
 function focusForOutcome(
-  outcome: Outcome,
+  outcome: Outcome | null | undefined,
   monthKeys: string[],
   weekStartsOn: WeekStartsOn
 ): { monthKey: string | null; weekKey: string | null } {
+  if (!outcome) return { monthKey: null, weekKey: null };
   if (!monthKeys.length) return { monthKey: null, weekKey: null };
 
   const today = parseISODate(todayISO());
@@ -361,17 +372,25 @@ function focusForOutcome(
   return { monthKey, weekKey: `${monthKey}:${weekStart}` };
 }
 
-export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; weekStartsOn: WeekStartsOn }) {
-  const monthly = useAppState((s) => s.monthly);
-  const weekly = useAppState((s) => s.weekly);
-  const daily = useAppState((s) => s.daily);
-  const showMonthlyObjectives = useAppState((s) => s.ui.showMonthlyObjectives);
-  const showWeeklyObjectives = useAppState((s) => s.ui.showWeeklyObjectives);
-  const [showOutcomeNotes, setShowOutcomeNotes] = React.useState(false);
+export type PlanNavigation = {
+  monthKeys: string[];
+  activeMonthKey: string | null;
+  expandedMonths: Set<string>;
+  expandedWeekKeys: Set<string>;
+  goToMonth: (monthKey: string) => void;
+  goToWeek: (monthKey: string, weekStartISO: string) => void;
+  goToDay: (monthKey: string, weekStartISO: string, dateISO: string) => void;
+  goRelativeMonth: (delta: -1 | 1) => void;
+  toggleMonth: (monthKey: string) => void;
+  toggleWeek: (weekKey: string) => void;
+  collapseAll: () => void;
+};
 
-  const monthKeys = React.useMemo(() => monthKeysInRange(outcome.startDate, outcome.endDate), [outcome.startDate, outcome.endDate]);
-  const outcomeNotes = outcome.notes.trim();
-
+export function usePlanNavigation(outcome: Outcome | null | undefined, weekStartsOn: WeekStartsOn): PlanNavigation {
+  const monthKeys = React.useMemo(
+    () => (outcome ? monthKeysInRange(outcome.startDate, outcome.endDate) : []),
+    [outcome?.startDate, outcome?.endDate]
+  );
   const [focusedMonth, setFocusedMonth] = React.useState<string | null>(null);
 
   const [expandedMonths, setExpandedMonths] = React.useState<Set<string>>(() => {
@@ -389,15 +408,11 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
     setExpandedMonths(monthKey ? new Set([monthKey]) : new Set());
     setExpandedWeekKeys(weekKey ? new Set([weekKey]) : new Set());
     setFocusedMonth(monthKey);
-  }, [outcome.id, outcome.startDate, outcome.endDate, monthKeys, weekStartsOn]);
-
-  React.useEffect(() => {
-    setShowOutcomeNotes(false);
-  }, [outcome.id]);
+  }, [outcome?.id, outcome?.startDate, outcome?.endDate, monthKeys, weekStartsOn]);
 
   const activeMonthKey = React.useMemo(() => {
     if (focusedMonth && monthKeys.includes(focusedMonth)) return focusedMonth;
-    for (const mk of monthKeys) if (expandedMonths.has(mk)) return mk;
+    for (const monthKey of monthKeys) if (expandedMonths.has(monthKey)) return monthKey;
     return focusForOutcome(outcome, monthKeys, weekStartsOn).monthKey;
   }, [expandedMonths, focusedMonth, monthKeys, outcome, weekStartsOn]);
 
@@ -460,6 +475,52 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
     });
   }
 
+  function collapseAll() {
+    setExpandedMonths(new Set());
+    setExpandedWeekKeys(new Set());
+    setFocusedMonth(null);
+  }
+
+  return {
+    monthKeys,
+    activeMonthKey,
+    expandedMonths,
+    expandedWeekKeys,
+    goToMonth,
+    goToWeek,
+    goToDay,
+    goRelativeMonth,
+    toggleMonth,
+    toggleWeek,
+    collapseAll
+  };
+}
+
+export { TimelineYardstick };
+
+export default function PlanView({
+  outcome,
+  weekStartsOn,
+  navigation
+}: {
+  outcome: Outcome;
+  weekStartsOn: WeekStartsOn;
+  navigation: PlanNavigation;
+}) {
+  const monthly = useAppState((s) => s.monthly);
+  const weekly = useAppState((s) => s.weekly);
+  const daily = useAppState((s) => s.daily);
+  const showMonthlyObjectives = useAppState((s) => s.ui.showMonthlyObjectives);
+  const showWeeklyObjectives = useAppState((s) => s.ui.showWeeklyObjectives);
+  const [showOutcomeNotes, setShowOutcomeNotes] = React.useState(false);
+  const { monthKeys, activeMonthKey, expandedMonths, expandedWeekKeys, goToMonth, goToWeek, goToDay, goRelativeMonth, toggleMonth, toggleWeek, collapseAll } =
+    navigation;
+  const outcomeNotes = outcome.notes.trim();
+
+  React.useEffect(() => {
+    setShowOutcomeNotes(false);
+  }, [outcome.id]);
+
   function monthProgress(monthKey: string): { done: number; total: number } {
     const weekStarts = weekStartsForMonth(monthKey, weekStartsOn);
     let done = 0;
@@ -474,14 +535,15 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
 
   return (
     <div className="grid gap-4">
-      <Card className="p-4">
+      <Card className="app-card-soft rounded-[0.95rem] p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-sm font-semibold">Plan</div>
-            <div className="mt-1 text-sm text-zinc-400">
-              Fill the plan top-down: outcome → month focus → week focus → daily commitment.
+            <div className="app-kicker">Plan</div>
+            <div className="font-display mt-2 text-lg font-semibold">Fill the plan top-down: outcome to month to week to day.</div>
+            <div className="mt-2 text-sm leading-6 app-muted">
+              The view now stays easier to scan: use the month strip, the yardstick, or the open cards below to move around.
             </div>
-            <div className="mt-2 text-xs text-zinc-500">Active days: {formatDaysOfWeek(outcome.daysOfWeek)}</div>
+            <div className="mt-2 text-xs app-muted">Active days: {formatDaysOfWeek(outcome.daysOfWeek)}</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -513,12 +575,8 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
                 if (t.getTime() < start.getTime() || t.getTime() > end.getTime()) return;
                 if (!isDateActive(today, outcome.daysOfWeek)) return;
                 const monthKey = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`;
-                setFocusedMonth(monthKey);
-                setExpandedMonths((prev) => new Set([...prev, monthKey]));
                 const weekStart = toISODate(startOfWeek(t, weekStartsOn));
-                setExpandedWeekKeys((prev) => new Set([...prev, `${monthKey}:${weekStart}`]));
-                const el = document.getElementById(`day-${today}`);
-                el?.scrollIntoView({ block: "center" });
+                goToDay(monthKey, weekStart, today);
               }}
             >
               Jump to today
@@ -547,49 +605,53 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => {
-                setExpandedMonths(new Set());
-                setExpandedWeekKeys(new Set());
-                setFocusedMonth(null);
-              }}
+              onClick={collapseAll}
             >
               Collapse all
             </Button>
           </div>
         </div>
 
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          {monthKeys.map((monthKey) => {
+            const active = activeMonthKey === monthKey;
+            const { done, total } = monthProgress(monthKey);
+            return (
+              <button
+                key={monthKey}
+                type="button"
+                className={[
+                  "shrink-0 rounded-[0.6rem] border px-3 py-2 text-left text-sm transition",
+                  active
+                    ? "border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] text-[color:var(--outcome-ink)]"
+                    : "border-[color:var(--app-border)] bg-[color:var(--app-elevated)] hover:bg-[color:var(--app-nav-hover)]"
+                ].join(" ")}
+                onClick={() => goToMonth(monthKey)}
+              >
+                <div className="font-semibold">{formatMonthLabel(monthKey)}</div>
+                <div className="mt-1 text-[11px] app-muted">
+                  {total ? `${done}/${total} done` : "No active days"}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
         {outcomeNotes ? (
-          <div className="mt-4 rounded-2xl border border-zinc-900 bg-zinc-950/30 p-3">
+          <div className="mt-4 rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="text-xs font-medium text-zinc-400">Outcome description</div>
-                <div className="mt-1 text-xs text-zinc-500">Your high-level intent for this outcome.</div>
+                <div className="app-kicker">Outcome description</div>
+                <div className="mt-1 text-xs app-muted">Your high-level intent for this outcome.</div>
               </div>
               <Button size="sm" variant="ghost" onClick={() => setShowOutcomeNotes((prev) => !prev)} aria-expanded={showOutcomeNotes}>
                 {showOutcomeNotes ? "Hide description" : "Show description"}
               </Button>
             </div>
-            {showOutcomeNotes ? (
-              <div className="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-200">{outcomeNotes}</div>
-            ) : null}
+            {showOutcomeNotes ? <div className="mt-3 whitespace-pre-wrap text-sm leading-6">{outcomeNotes}</div> : null}
           </div>
         ) : null}
 
-        <div className="mt-4">
-          <TimelineYardstick
-            outcome={outcome}
-            monthKeys={monthKeys}
-            weekStartsOn={weekStartsOn}
-            expandedMonths={expandedMonths}
-            expandedWeekKeys={expandedWeekKeys}
-            monthly={monthly}
-            weekly={weekly}
-            daily={daily}
-            onJumpMonth={goToMonth}
-            onJumpWeek={goToWeek}
-            onJumpDay={goToDay}
-          />
-        </div>
       </Card>
 
       <div className="grid gap-3">
@@ -603,9 +665,9 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
           );
 
           return (
-            <Card key={monthKey} id={`month-${monthKey}`} className="overflow-hidden">
+            <Card key={monthKey} id={`month-${monthKey}`} className="overflow-hidden rounded-[0.9rem]">
               <button
-                className="flex w-full items-center justify-between gap-3 border-b border-zinc-900 bg-zinc-950/30 px-4 py-3 text-left hover:bg-zinc-950/60"
+                className="flex w-full items-center justify-between gap-3 border-b border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-4 py-4 text-left hover:bg-[color:var(--app-nav-hover)]"
                 aria-expanded={expanded}
                 onClick={() => toggleMonth(monthKey)}
               >
@@ -613,13 +675,13 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
                   <div className="truncate text-sm font-semibold">{formatMonthLabel(monthKey)}</div>
                   {showMonthlyObjectives ? (
                     <div
-                      className={["mt-1 truncate text-xs", monthTitle.trim() ? "text-zinc-200" : "text-zinc-500"].join(" ")}
+                      className={["mt-1 truncate text-xs", monthTitle.trim() ? "" : "app-muted"].join(" ")}
                       title={monthTitle.trim() ? monthTitle : "No monthly objective yet"}
                     >
-                      Monthly: {monthTitle.trim() ? monthTitle : "—"}
+                      Monthly: {monthTitle.trim() ? monthTitle : "-"}
                     </div>
                   ) : null}
-                  <div className="mt-1 text-xs text-zinc-400">
+                  <div className="mt-1 text-xs app-muted">
                     {total ? `${done}/${total} consistent days` : "No days in range"}
                   </div>
                 </div>
@@ -634,7 +696,7 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
               {expanded ? (
                 <div className="grid gap-3 p-4">
                   <div className="grid gap-2">
-                    <div className="text-xs font-medium text-zinc-400">Monthly goal (single calendar month)</div>
+                    <div className="app-kicker">Monthly goal</div>
                     <Input
                       value={monthTitle}
                       onChange={(e) => actions.setMonthlyTitle(outcome.id, monthKey, e.target.value)}
@@ -643,7 +705,7 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
                   </div>
 
                   <div className="grid gap-2 pl-3 sm:pl-4">
-                    <div className="text-xs font-medium text-zinc-400">Weekly goals (calendar weeks)</div>
+                    <div className="app-kicker">Weekly goals</div>
                     <div className="grid gap-2">
                       {weekStarts.map((weekStartISO) => {
                         const weekKey = `${outcome.id}:${monthKey}:${weekStartISO}`;
@@ -664,25 +726,25 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
                         );
 
                         return (
-                          <Card key={weekKey} id={`week-${monthKey}-${weekStartISO}`} className="overflow-hidden">
-	                            <button
-	                              className="flex w-full items-center justify-between gap-3 border-b border-zinc-900 bg-zinc-950/20 px-4 py-3 text-left hover:bg-zinc-950/50"
-	                              aria-expanded={expandedWeek}
-	                              onClick={() => toggleWeek(expandedWeekKey)}
-	                            >
-	                              <div className="min-w-0">
-	                                <div className="truncate text-sm font-semibold">{formatWeekLabel(weekStartISO)}</div>
-	                                {showWeeklyObjectives ? (
-	                                  <div
-	                                    className={["mt-1 truncate text-xs", weekTitle.trim() ? "text-zinc-200" : "text-zinc-500"].join(" ")}
-	                                    title={weekTitle.trim() ? weekTitle : "No weekly objective yet"}
-	                                  >
-	                                    Weekly: {weekTitle.trim() ? weekTitle : "—"}
-	                                  </div>
-	                                ) : null}
-	                                <div className="mt-1 text-xs text-zinc-400">
-	                                  {weekDays.length ? `${doneDays}/${weekDays.length} days done` : "No days in this month-week"}
-	                                </div>
+                          <Card key={weekKey} id={`week-${monthKey}-${weekStartISO}`} className="overflow-hidden rounded-[0.8rem]">
+		                            <button
+		                              className="flex w-full items-center justify-between gap-3 border-b border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-4 py-4 text-left hover:bg-[color:var(--app-nav-hover)]"
+		                              aria-expanded={expandedWeek}
+		                              onClick={() => toggleWeek(expandedWeekKey)}
+		                            >
+		                              <div className="min-w-0">
+		                                <div className="truncate text-sm font-semibold">{formatWeekLabel(weekStartISO)}</div>
+		                                {showWeeklyObjectives ? (
+		                                  <div
+		                                    className={["mt-1 truncate text-xs", weekTitle.trim() ? "" : "app-muted"].join(" ")}
+		                                    title={weekTitle.trim() ? weekTitle : "No weekly objective yet"}
+		                                  >
+		                                    Weekly: {weekTitle.trim() ? weekTitle : "-"}
+		                                  </div>
+		                                ) : null}
+		                                <div className="mt-1 text-xs app-muted">
+		                                  {weekDays.length ? `${doneDays}/${weekDays.length} days done` : "No days in this month-week"}
+		                                </div>
 	                              </div>
                               <div className="flex items-center gap-3">
                                 <div className="w-24">
@@ -692,23 +754,23 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
                               </div>
                             </button>
 
-                            {expandedWeek ? (
-                              <div className="grid gap-3 p-4">
-                                <div className="grid gap-2">
-                                  <div className="text-xs font-medium text-zinc-400">Weekly goal</div>
-                                  <Input
-                                    value={weekTitle}
-                                    onChange={(e) => actions.setWeeklyTitle(outcome.id, monthKey, weekStartISO, e.target.value)}
+		                            {expandedWeek ? (
+		                              <div className="grid gap-3 p-4">
+		                                <div className="grid gap-2">
+		                                  <div className="app-kicker">Weekly goal</div>
+		                                  <Input
+		                                    value={weekTitle}
+		                                    onChange={(e) => actions.setWeeklyTitle(outcome.id, monthKey, weekStartISO, e.target.value)}
                                     placeholder="What would make this week a win?"
                                   />
                                 </div>
 
-                                <div className="grid gap-2 pl-3 sm:pl-4">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div className="text-xs font-medium text-zinc-400">Daily commitments</div>
-                                    <Button
-                                      size="sm"
-                                      onClick={() => {
+		                                <div className="grid gap-2 pl-3 sm:pl-4">
+		                                  <div className="flex items-center justify-between gap-3">
+		                                    <div className="app-kicker">Daily commitments</div>
+		                                    <Button
+		                                      size="sm"
+		                                      onClick={() => {
                                         const first = weekDays[0];
                                         if (!first) return;
                                         const el = document.getElementById(`day-${first}`);
@@ -726,76 +788,81 @@ export default function PlanView({ outcome, weekStartsOn }: { outcome: Outcome; 
                                       const items =
                                         Array.isArray(entry.items) && entry.items.length ? entry.items : [entry.title ?? ""];
                                       const itemsDone = Array.isArray(entry.itemsDone) ? entry.itemsDone : [];
-                                      return (
-                                        <div
-                                          key={dateISO}
-                                          id={`day-${dateISO}`}
-                                          className={[
-                                            "flex flex-col gap-2 rounded-2xl border p-3 sm:flex-row sm:items-start",
-                                            isToday(dateISO) ? "border-emerald-500/40 bg-emerald-500/5" : "border-zinc-900 bg-zinc-950/30"
-                                          ].join(" ")}
-                                        >
-                                          <div className="flex items-center gap-3 sm:w-44">
-                                            <button
-                                              className={[
-                                                "h-6 w-6 rounded-lg border transition",
-                                                entry.done ? "border-emerald-400 bg-emerald-400/20" : "border-zinc-800 bg-zinc-950"
-                                              ].join(" ")}
-                                              aria-label={entry.done ? "Mark not done" : "Mark done"}
-                                              onClick={() => actions.toggleDailyDone(outcome.id, dateISO)}
-                                            />
-                                            <div className="text-sm font-medium">{dayLabel(dateISO)}</div>
-                                          </div>
+		                                      return (
+		                                        <div
+		                                          key={dateISO}
+		                                          id={`day-${dateISO}`}
+		                                          className={[
+		                                            "flex flex-col gap-2 rounded-[0.7rem] border p-3 sm:flex-row sm:items-start",
+		                                            isToday(dateISO)
+		                                              ? "border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)]"
+		                                              : "border-[color:var(--app-border)] bg-[color:var(--app-elevated)]"
+		                                          ].join(" ")}
+		                                        >
+		                                          <div className="flex items-center gap-3 sm:w-44">
+		                                            <button
+		                                              className={[
+		                                                "inline-flex h-6 w-6 items-center justify-center rounded-[0.45rem] border transition",
+		                                                entry.done
+		                                                  ? "border-[color:var(--outcome-accent-strong)] bg-[color:var(--outcome-accent-strong)] text-[#201611]"
+		                                                  : "border-[color:var(--app-border)] bg-[color:var(--app-input)]"
+		                                              ].join(" ")}
+		                                              aria-label={entry.done ? "Mark not done" : "Mark done"}
+		                                              onClick={() => actions.toggleDailyDone(outcome.id, dateISO)}
+		                                            >
+		                                              {entry.done ? "x" : ""}
+		                                            </button>
+		                                            <div className="text-sm font-medium">{dayLabel(dateISO)}</div>
+		                                          </div>
                                           <div className="min-w-0 flex-1">
                                             <div className="grid gap-2">
                                               {items.map((t, idx) => {
                                                 const done = Boolean(itemsDone[idx]);
-                                                return (
-                                                  <div key={idx} className="flex items-center gap-2">
-                                                    <button
-                                                      type="button"
-                                                      className={[
-                                                        "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition focus:outline-none focus:ring-2 focus:ring-zinc-200/20",
-                                                        done
-                                                          ? "border-emerald-400 bg-emerald-400/20 text-emerald-200"
-                                                          : "border-zinc-800 bg-zinc-950 text-transparent hover:bg-zinc-900"
-                                                      ].join(" ")}
-                                                      aria-label={done ? `Mark task ${idx + 1} not done` : `Mark task ${idx + 1} done`}
-                                                      aria-pressed={done}
-                                                      title={done ? "Mark not done" : "Mark done"}
-                                                      onClick={() => actions.toggleDailyItemDone(outcome.id, dateISO, idx)}
-                                                    >
-                                                      ✓
-                                                    </button>
+		                                                return (
+		                                                  <div key={idx} className="flex items-center gap-2">
+		                                                    <button
+		                                                      type="button"
+		                                                      className={[
+		                                                        "app-check inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition focus:outline-none",
+		                                                        done ? "" : ""
+		                                                      ].join(" ")}
+		                                                      data-state={done ? "done" : "none"}
+		                                                      aria-label={done ? `Mark task ${idx + 1} not done` : `Mark task ${idx + 1} done`}
+		                                                      aria-pressed={done}
+		                                                      title={done ? "Mark not done" : "Mark done"}
+		                                                      onClick={() => actions.toggleDailyItemDone(outcome.id, dateISO, idx)}
+		                                                    >
+		                                                      x
+		                                                    </button>
                                                     <Input
-                                                      value={t}
-                                                      onChange={(e) => actions.setDailyItem(outcome.id, dateISO, idx, e.target.value)}
-                                                      placeholder={idx === 0 ? "Daily: the smallest thing you’ll actually do." : "Another tiny task…"}
-                                                      className={[
-                                                        "h-9 flex-1 rounded-lg px-2 text-[13px]",
-                                                        done ? "text-zinc-400 line-through placeholder:text-zinc-600" : ""
-                                                      ].join(" ")}
-                                                      aria-label={`Daily task ${idx + 1}`}
-                                                    />
-                                                    <button
-                                                      type="button"
-                                                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 text-sm text-zinc-400 transition hover:bg-zinc-900 hover:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-200/20"
-                                                      aria-label={`Delete daily task ${idx + 1}`}
-                                                      title="Delete daily task"
-                                                      onClick={() => actions.removeDailyItem(outcome.id, dateISO, idx)}
+		                                                      value={t}
+		                                                      onChange={(e) => actions.setDailyItem(outcome.id, dateISO, idx, e.target.value)}
+		                                                      placeholder={idx === 0 ? "Daily: the smallest thing you'll actually do." : "Another tiny task..."}
+		                                                      className={[
+		                                                        "h-9 flex-1 rounded-[0.55rem] px-2 text-[13px]",
+		                                                        done ? "line-through opacity-70" : ""
+		                                                      ].join(" ")}
+		                                                      aria-label={`Daily task ${idx + 1}`}
+		                                                    />
+		                                                    <button
+		                                                      type="button"
+		                                                      className="app-ghost-outline inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[0.45rem] text-sm transition focus:outline-none"
+		                                                      aria-label={`Delete daily task ${idx + 1}`}
+		                                                      title="Delete daily task"
+		                                                      onClick={() => actions.removeDailyItem(outcome.id, dateISO, idx)}
                                                     >
                                                       -
                                                     </button>
                                                   </div>
                                                 );
                                               })}
-                                              <div className="flex justify-end">
-                                                <button
-                                                  type="button"
-                                                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 text-sm text-zinc-400 transition hover:bg-zinc-900 hover:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-200/20"
-                                                  aria-label="Add daily task"
-                                                  title="Add daily task"
-                                                  onClick={() => actions.addDailyItem(outcome.id, dateISO)}
+		                                              <div className="flex justify-end">
+		                                                <button
+		                                                  type="button"
+		                                                  className="app-ghost-outline inline-flex h-7 w-7 items-center justify-center rounded-[0.45rem] text-sm transition focus:outline-none"
+		                                                  aria-label="Add daily task"
+		                                                  title="Add daily task"
+		                                                  onClick={() => actions.addDailyItem(outcome.id, dateISO)}
                                                 >
                                                   +
                                                 </button>

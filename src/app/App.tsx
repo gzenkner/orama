@@ -1,5 +1,5 @@
 import React from "react";
-import type { AppTab, DayOfWeek, Outcome } from "./types";
+import type { AppTab, AppThemeMode, DayOfWeek, Outcome } from "./types";
 import { actions, useAppState } from "./store";
 import {
   ALL_DAYS_OF_WEEK,
@@ -11,16 +11,19 @@ import {
   parseISODate,
   toISODate
 } from "./date";
+import { OUTCOME_THEME_ORDER, getOutcomeTheme, getOutcomeThemeStyle } from "./theme";
 import Button from "./ui/Button";
 import Card from "./ui/Card";
 import Input from "./ui/Input";
 import Modal from "./ui/Modal";
-import Tabs, { type TabKey } from "./ui/Tabs";
+import { TAB_META } from "./ui/Tabs";
 import Textarea from "./ui/Textarea";
 import OverviewView from "./views/OverviewView";
-import PlanView from "./views/PlanView";
+import PlanView, { TimelineYardstick, usePlanNavigation } from "./views/PlanView";
 import CalendarView from "./views/CalendarView";
 import BackupView from "./views/BackupView";
+import { cn } from "./ui/cn";
+import oramaLogo from "../../orama_logo.png";
 
 function firstOutcomeId(outcomes: Outcome[]): string | undefined {
   return outcomes[0]?.id;
@@ -38,83 +41,224 @@ function toggleDay(daysOfWeek: DayOfWeek[], day: DayOfWeek): DayOfWeek[] {
   return [...daysOfWeek, day].sort((a, b) => a - b) as DayOfWeek[];
 }
 
-function Sidebar({ onNewOutcome }: { onNewOutcome: () => void }) {
+function OutcomeBadge({ outcome }: { outcome: Outcome }) {
+  const theme = getOutcomeTheme(outcome.themeId);
+  return (
+    <span style={getOutcomeThemeStyle(outcome.themeId)} className="app-outcome-pill rounded-[0.55rem] px-3 py-1 text-xs font-semibold">
+      {theme.label}
+    </span>
+  );
+}
+
+function ThemeToggle({ value }: { value: AppThemeMode }) {
+  const items: AppThemeMode[] = ["white", "black"];
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {items.map((mode) => {
+        const active = mode === value;
+        return (
+          <button
+            key={mode}
+            type="button"
+            className={cn(
+              "rounded-[0.6rem] border px-3 py-2 text-sm font-semibold transition",
+              active
+                ? "app-tab app-tab-active"
+                : "border-[color:var(--app-border)] bg-[color:var(--app-elevated)] text-[color:var(--app-muted)] hover:bg-[color:var(--app-nav-hover)]"
+            )}
+            aria-pressed={active}
+            onClick={() => actions.setThemeMode(mode)}
+          >
+            {mode === "white" ? "White" : "Black"}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function WeekStartToggle() {
+  const weekStartsOn = useAppState((s) => s.weekStartsOn);
+
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <button
+        type="button"
+        className={cn(
+          "rounded-[0.6rem] border px-3 py-2 text-sm font-semibold transition",
+          weekStartsOn === 0
+            ? "app-tab app-tab-active"
+            : "border-[color:var(--app-border)] bg-[color:var(--app-elevated)] text-[color:var(--app-muted)] hover:bg-[color:var(--app-nav-hover)]"
+        )}
+        onClick={() => actions.setWeekStartsOn(0)}
+      >
+        Sunday
+      </button>
+      <button
+        type="button"
+        className={cn(
+          "rounded-[0.6rem] border px-3 py-2 text-sm font-semibold transition",
+          weekStartsOn === 1
+            ? "app-tab app-tab-active"
+            : "border-[color:var(--app-border)] bg-[color:var(--app-elevated)] text-[color:var(--app-muted)] hover:bg-[color:var(--app-nav-hover)]"
+        )}
+        onClick={() => actions.setWeekStartsOn(1)}
+      >
+        Monday
+      </button>
+    </div>
+  );
+}
+
+function SettingsPanel({ compact = false }: { compact?: boolean }) {
+  const themeMode = useAppState((s) => s.ui.themeMode);
+
+  return (
+    <Card className={cn("rounded-[0.85rem] p-4", compact ? "" : "app-fade-up")}>
+      <div className="app-kicker">Settings</div>
+      <div className="mt-3 grid gap-4">
+        <div className="grid gap-2">
+          <div className="text-sm font-semibold">Appearance</div>
+          <div className="text-xs app-muted">Switch the shell between a paper-white workspace and a black canvas.</div>
+          <ThemeToggle value={themeMode} />
+        </div>
+
+        <div className="grid gap-2">
+          <div className="text-sm font-semibold">Week start</div>
+          <div className="text-xs app-muted">Controls both weekly grouping and the calendar layout.</div>
+          <WeekStartToggle />
+        </div>
+
+        <div className="rounded-[0.6rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-3 py-2 text-xs app-muted">
+          Each outcome keeps its own pastel accent so you can spot it quickly across the app.
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
+  const activeTab = useAppState((s) => s.ui.activeTab);
+  const keys = Object.keys(TAB_META) as AppTab[];
+
+  return (
+    <div className="grid gap-2">
+      <div className="app-kicker">Workspace</div>
+      {keys.map((key) => {
+        const active = activeTab === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            className={cn(
+              "rounded-[0.7rem] border px-4 py-3 text-left transition",
+              active
+                ? "app-tab app-tab-active"
+                : "border-[color:var(--app-border)] bg-[color:var(--app-elevated)] hover:bg-[color:var(--app-nav-hover)]"
+            )}
+            onClick={() => {
+              actions.setActiveTab(key);
+              onSelect?.();
+            }}
+          >
+            <div className="text-sm font-semibold">{TAB_META[key].label}</div>
+            <div className="mt-1 text-xs app-muted">{TAB_META[key].hint}</div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function OutcomeList({ onSelect }: { onSelect?: () => void }) {
   const outcomes = useAppState((s) => s.outcomes);
   const selectedOutcomeId = useAppState((s) => s.selectedOutcomeId);
-  const weekStartsOn = useAppState((s) => s.weekStartsOn);
 
   React.useEffect(() => {
     if (!selectedOutcomeId && outcomes.length) actions.selectOutcome(firstOutcomeId(outcomes)!);
   }, [outcomes, selectedOutcomeId]);
 
+  if (!outcomes.length) {
+    return (
+      <div className="rounded-[0.7rem] border border-dashed border-[color:var(--app-border)] px-4 py-5 text-sm app-muted">
+        Create your first outcome to start shaping the workspace.
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-full w-full flex-col gap-4 border-r border-zinc-900 bg-zinc-950/40 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold">Goals</div>
-          <div className="text-xs text-zinc-400">Outcome → monthly → weekly → daily</div>
+    <div className="grid gap-2">
+      {outcomes.map((outcome) => {
+        const active = outcome.id === selectedOutcomeId;
+
+        return (
+          <button
+            key={outcome.id}
+            type="button"
+            style={getOutcomeThemeStyle(outcome.themeId)}
+            className={cn(
+              "rounded-[0.65rem] border px-3 py-3 text-left transition",
+              active
+                ? "app-card-soft"
+                : "border-[color:var(--app-border)] bg-[color:var(--app-card)] hover:bg-[color:var(--app-nav-hover)]"
+            )}
+            onClick={() => {
+              actions.selectOutcome(outcome.id);
+              onSelect?.();
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-3.5 w-3.5 shrink-0 rounded-full border border-[color:var(--outcome-border)] bg-[color:var(--outcome-accent)]" />
+              <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">{outcome.title}</div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Sidebar({ onNewOutcome }: { onNewOutcome: () => void }) {
+  return (
+    <aside className="app-panel flex h-full min-h-0 w-full flex-col rounded-[0.95rem] p-5">
+      <div className="rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] p-3">
+        <div className="flex items-center justify-between gap-3">
+          <img src={oramaLogo} alt="Orama" className="h-8 w-auto" />
+          <Button variant="primary" size="sm" title="Create a new outcome" onClick={onNewOutcome}>
+            Create new
+          </Button>
         </div>
-        <Button variant="primary" size="sm" onClick={onNewOutcome}>
-          New
-        </Button>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <div className="text-xs font-medium text-zinc-400">Outcomes</div>
-        {outcomes.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-zinc-800 p-3 text-sm text-zinc-400">
-            Create your first outcome.
+      <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-auto pl-4 pr-1">
+          <div className="app-kicker">Outcomes</div>
+          <div className="mt-3 grid gap-2">
+            <OutcomeList />
           </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {outcomes.map((o) => {
-              const active = o.id === selectedOutcomeId;
-              return (
-                <button
-                  key={o.id}
-                  className={[
-                    "rounded-2xl border p-3 text-left transition",
-                    active ? "border-zinc-700 bg-zinc-900" : "border-zinc-900 bg-transparent hover:bg-zinc-950"
-                  ].join(" ")}
-                  onClick={() => actions.selectOutcome(o.id)}
-                >
-                  <div className="truncate text-sm font-medium">{o.title}</div>
-                  <div className="mt-1 text-xs text-zinc-400">
-                    {formatShortDate(o.startDate)} → {formatShortDate(o.endDate)}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
+        </div>
 
-      <div className="mt-auto flex flex-col gap-2">
-        <Card className="p-3">
-          <div className="text-xs font-medium text-zinc-400">Week start</div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <button
-              className={[
-                "rounded-xl border px-3 py-2 text-sm transition",
-                weekStartsOn === 0 ? "border-zinc-700 bg-zinc-900" : "border-zinc-800 hover:bg-zinc-900"
-              ].join(" ")}
-              onClick={() => actions.setWeekStartsOn(0)}
-            >
-              Sunday
-            </button>
-            <button
-              className={[
-                "rounded-xl border px-3 py-2 text-sm transition",
-                weekStartsOn === 1 ? "border-zinc-700 bg-zinc-900" : "border-zinc-800 hover:bg-zinc-900"
-              ].join(" ")}
-              onClick={() => actions.setWeekStartsOn(1)}
-            >
-              Monday
-            </button>
-          </div>
-          <div className="mt-2 text-xs text-zinc-500">Applies to weekly grouping + calendar layout.</div>
-        </Card>
+        <div className="mt-4 shrink-0 border-t border-[color:var(--app-border)] pt-4">
+          <WorkspaceNav />
+        </div>
       </div>
+    </aside>
+  );
+}
+
+function SettingsView() {
+  return (
+    <div className="grid gap-4">
+      <Card className="app-card-soft rounded-[0.95rem] p-5">
+        <div className="app-kicker">Settings</div>
+        <div className="font-display mt-2 text-lg font-semibold">Tune the workspace and planning defaults.</div>
+        <div className="mt-2 text-sm leading-6 app-muted">
+          Appearance changes update the whole app. Week start changes how planning weeks and the calendar line up. Backup and restore live here too.
+        </div>
+      </Card>
+
+      <SettingsPanel compact />
+      <BackupView />
     </div>
   );
 }
@@ -126,6 +270,7 @@ function OutcomeModal({ open, onClose, outcome }: { open: boolean; onClose: () =
   const [endDate, setEndDate] = React.useState(outcome?.endDate ?? todayISO());
   const [daysOfWeek, setDaysOfWeek] = React.useState<DayOfWeek[]>(normalizeDaysOfWeek(outcome?.daysOfWeek));
   const [error, setError] = React.useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) return;
@@ -135,6 +280,7 @@ function OutcomeModal({ open, onClose, outcome }: { open: boolean; onClose: () =
     setEndDate(outcome?.endDate ?? todayISO());
     setDaysOfWeek(normalizeDaysOfWeek(outcome?.daysOfWeek));
     setError(null);
+    setConfirmDelete(false);
   }, [open, outcome]);
 
   const isEdit = Boolean(outcome);
@@ -143,13 +289,13 @@ function OutcomeModal({ open, onClose, outcome }: { open: boolean; onClose: () =
     if (!title.trim()) return false;
     if (!daysOfWeek.length) return false;
     try {
-      const s = parseISODate(startDate);
-      const e = parseISODate(endDate);
-      return s.getTime() <= e.getTime();
+      const start = parseISODate(startDate);
+      const end = parseISODate(endDate);
+      return start.getTime() <= end.getTime();
     } catch {
       return false;
     }
-  }, [daysOfWeek.length, title, startDate, endDate]);
+  }, [daysOfWeek.length, endDate, startDate, title]);
 
   function save() {
     if (!canSave) return;
@@ -165,6 +311,12 @@ function OutcomeModal({ open, onClose, outcome }: { open: boolean; onClose: () =
     }
   }
 
+  function removeOutcome() {
+    if (!outcome) return;
+    actions.deleteOutcome(outcome.id);
+    onClose();
+  }
+
   return (
     <Modal
       open={open}
@@ -172,55 +324,68 @@ function OutcomeModal({ open, onClose, outcome }: { open: boolean; onClose: () =
       title={isEdit ? "Edit outcome" : "Create a new outcome"}
       footer={
         <>
-          {isEdit ? (
-            <Button
-              variant="danger"
-              onClick={() => {
-                if (!outcome) return;
-                const ok = confirm(`Delete outcome “${outcome.title}”? This removes all slices too.`);
-                if (!ok) return;
-                actions.deleteOutcome(outcome.id);
-                onClose();
-              }}
-            >
-              Delete
-            </Button>
-          ) : null}
-          <div className="flex-1" />
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={!canSave} onClick={save}>
-            Save
-          </Button>
+          {confirmDelete ? (
+            <>
+              <div className="flex-1 text-xs app-muted">Delete this outcome and all of its month, week, and day slices.</div>
+              <Button onClick={() => setConfirmDelete(false)}>Keep outcome</Button>
+              <Button variant="danger" onClick={removeOutcome}>
+                Confirm delete
+              </Button>
+            </>
+          ) : (
+            <>
+              {isEdit ? (
+                <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+                  Delete
+                </Button>
+              ) : null}
+              <div className="flex-1" />
+              <Button onClick={onClose}>Cancel</Button>
+              <Button variant="primary" disabled={!canSave} onClick={save}>
+                Save
+              </Button>
+            </>
+          )}
         </>
       }
     >
       <div className="grid gap-4">
+        {confirmDelete ? (
+          <Card className="rounded-[0.75rem] border border-red-300/40 bg-red-50/80 p-4">
+            <div className="text-sm font-semibold text-red-700">Delete this outcome?</div>
+            <div className="mt-2 text-sm leading-6 text-red-700/90">
+              This removes the outcome itself and all connected monthly, weekly, and daily planning data.
+            </div>
+          </Card>
+        ) : null}
+
         <div className="grid gap-2">
-          <div className="text-xs font-medium text-zinc-400">Outcome title</div>
+          <div className="app-kicker">Outcome title</div>
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., Run a sub-4 hour marathon" />
         </div>
 
         <div className="grid gap-2">
-          <div className="text-xs font-medium text-zinc-400">Notes (optional)</div>
+          <div className="app-kicker">Notes</div>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What does success look like? Why does it matter?" />
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="grid gap-2">
-            <div className="text-xs font-medium text-zinc-400">Start date</div>
+            <div className="app-kicker">Start date</div>
             <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           </div>
           <div className="grid gap-2">
-            <div className="text-xs font-medium text-zinc-400">End date</div>
+            <div className="app-kicker">End date</div>
             <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
         </div>
 
         <div className="grid gap-2">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-xs font-medium text-zinc-400">Planning days</div>
-            <div className="text-xs text-zinc-500">{formatDaysOfWeek(daysOfWeek)}</div>
+            <div className="app-kicker">Planning days</div>
+            <div className="text-xs app-muted">{formatDaysOfWeek(daysOfWeek)}</div>
           </div>
+
           <div className="grid grid-cols-7 gap-2">
             {ALL_DAYS_OF_WEEK.map((day) => {
               const active = daysOfWeek.includes(day);
@@ -228,12 +393,12 @@ function OutcomeModal({ open, onClose, outcome }: { open: boolean; onClose: () =
                 <button
                   key={day}
                   type="button"
-                  className={[
-                    "rounded-xl border px-2 py-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-zinc-200/20",
+                  className={cn(
+                    "rounded-[0.6rem] border px-2 py-3 text-sm font-semibold transition",
                     active
-                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100"
-                      : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-                  ].join(" ")}
+                      ? "border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] text-[color:var(--outcome-ink)]"
+                      : "border-[color:var(--app-border)] bg-[color:var(--app-input)] text-[color:var(--app-muted)] hover:bg-[color:var(--app-nav-hover)]"
+                  )}
                   aria-pressed={active}
                   onClick={() => setDaysOfWeek((prev) => toggleDay(prev, day))}
                 >
@@ -242,25 +407,42 @@ function OutcomeModal({ open, onClose, outcome }: { open: boolean; onClose: () =
               );
             })}
           </div>
-          <div className="text-xs text-zinc-500">
-            All 7 days are selected by default. Untick the days this goal should ignore, like weekends for work goals.
+
+          <div className="text-xs app-muted">
+            All 7 days are selected by default. Untick the days this outcome should ignore, like weekends for a work goal.
           </div>
         </div>
 
-        <Card className="p-4">
+        <Card className="app-card-soft rounded-[0.75rem] p-4">
           <div className="text-sm font-semibold">How planning works here</div>
-          <div className="mt-1 text-sm text-zinc-300">
-            You define a time-bound outcome, then fill in a goal for each month in the range, a goal for each calendar week
-            inside those months, and a daily commitment for each selected day.
-          </div>
-          <div className="mt-3 text-xs text-zinc-500">
-            Tip: keep daily commitments tiny—something you can do even on busy days.
+          <div className="mt-2 text-sm leading-6 app-muted">
+            Define a time-bound outcome, give each month and week a focus, then keep daily commitments small enough to finish even on a busy day.
           </div>
         </Card>
 
-        {error ? <div className="text-sm text-red-300">{error}</div> : null}
+        {error ? <div className="text-sm text-red-500">{error}</div> : null}
       </div>
     </Modal>
+  );
+}
+
+function EmptyState({ onNewOutcome }: { onNewOutcome: () => void }) {
+  return (
+    <div className="flex h-full w-full items-center justify-center p-6">
+      <Card className="app-card-soft w-[min(760px,94vw)] rounded-[1rem] p-8">
+        <div className="app-kicker">Start here</div>
+        <div className="font-display mt-3 text-4xl font-semibold">Create a time-bound outcome</div>
+        <div className="mt-3 max-w-2xl text-sm leading-7 app-muted">
+          Give Orama one concrete finish line and a date range. The app will map every month, week, and active day so the work feels
+          readable instead of sprawling.
+        </div>
+        <div className="mt-6">
+          <Button variant="primary" onClick={onNewOutcome}>
+            Create your first outcome
+          </Button>
+        </div>
+      </Card>
+    </div>
   );
 }
 
@@ -270,21 +452,30 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
   const weekStartsOn = useAppState((s) => s.weekStartsOn);
   const tab = useAppState((s) => s.ui.activeTab);
   const scrollTopByTab = useAppState((s) => s.ui.scrollTopByTab);
+  const monthly = useAppState((s) => s.monthly);
+  const weekly = useAppState((s) => s.weekly);
+  const daily = useAppState((s) => s.daily);
   const [editOpen, setEditOpen] = React.useState(false);
+  const [headerExpanded, setHeaderExpanded] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
 
-  const outcome = React.useMemo(() => outcomes.find((o) => o.id === selectedOutcomeId), [outcomes, selectedOutcomeId]);
+  const outcome = React.useMemo(() => outcomes.find((item) => item.id === selectedOutcomeId), [outcomes, selectedOutcomeId]);
+  const planNavigation = usePlanNavigation(outcome, weekStartsOn);
 
   React.useEffect(() => {
     if (outcome) return;
     if (outcomes.length) actions.selectOutcome(firstOutcomeId(outcomes)!);
-  }, [outcomes, outcome]);
+  }, [outcome, outcomes]);
+
+  React.useEffect(() => {
+    setHeaderExpanded(false);
+  }, [outcome?.id]);
 
   React.useLayoutEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
     container.scrollTop = scrollTopByTab[tab] ?? 0;
-  }, [tab, scrollTopByTab]);
+  }, [scrollTopByTab, tab]);
 
   React.useEffect(() => {
     const container = scrollRef.current;
@@ -302,6 +493,7 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
 
     const handleScroll = () => persistScroll(tab);
     container.addEventListener("scroll", handleScroll, { passive: true });
+
     return () => {
       container.removeEventListener("scroll", handleScroll);
       if (frame) cancelAnimationFrame(frame);
@@ -309,52 +501,86 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
   }, [tab]);
 
   if (!outcome) {
-    return (
-      <div className="flex h-full w-full items-center justify-center p-6">
-        <Card className="w-[min(720px,92vw)] p-6">
-          <div className="text-lg font-semibold">Create a time-bound outcome</div>
-          <div className="mt-2 text-sm text-zinc-300">
-            Start with an outcome and a date range. The app will show every month, week, and day in that range so you can plan
-            in “daily slices”.
-          </div>
-          <div className="mt-5 flex gap-2">
-            <Button variant="primary" onClick={onNewOutcome}>
-              Create your first outcome
-            </Button>
-          </div>
-        </Card>
-      </div>
-    );
+    return <EmptyState onNewOutcome={onNewOutcome} />;
   }
 
   const months = monthKeysInRange(outcome.startDate, outcome.endDate);
 
   return (
-    <div className="flex h-full w-full flex-col">
-      <div className="flex flex-col gap-3 border-b border-zinc-900 bg-zinc-950/30 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <div className="truncate text-base font-semibold">{outcome.title}</div>
-            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-300">
-              {months.length} month{months.length === 1 ? "" : "s"}
-            </span>
+    <div className="flex h-full w-full flex-col overflow-hidden">
+      <div className="border-b border-[color:var(--app-border)] p-4 sm:p-6">
+        <div className={cn("app-card-soft rounded-[0.95rem]", headerExpanded ? "p-5 sm:p-6" : "p-4 sm:p-5")}>
+          <div
+            className={cn(
+              "flex flex-col gap-4",
+              tab === "plan" ? "xl:grid xl:grid-cols-[minmax(260px,1fr)_minmax(0,2fr)] xl:items-start xl:gap-6" : ""
+            )}
+          >
+            <div className="flex flex-col gap-4">
+              <div
+                className={cn(
+                  "flex flex-col gap-4",
+                  tab === "plan" ? "" : "xl:flex-row xl:items-end xl:justify-between"
+                )}
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <OutcomeBadge outcome={outcome} />
+                    <span className="app-pill rounded-[0.55rem] px-3 py-1 text-xs font-semibold">
+                      {months.length} month{months.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+
+                  <div className="font-display mt-3 text-xl font-semibold leading-tight sm:text-[1.7rem]">{outcome.title}</div>
+
+                  <div className="mt-3 flex flex-wrap gap-2 text-sm">
+                    <span className="app-pill rounded-[0.55rem] px-3 py-1.5 app-muted">
+                      {formatShortDate(outcome.startDate)} - {formatShortDate(outcome.endDate)}
+                    </span>
+                    <span className="app-pill rounded-[0.55rem] px-3 py-1.5 app-muted">{formatDaysOfWeek(outcome.daysOfWeek)}</span>
+                  </div>
+                  {headerExpanded && outcome.notes.trim() ? (
+                    <div className="mt-4 max-w-3xl text-sm leading-7 app-muted">{outcome.notes}</div>
+                  ) : null}
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2 self-start">
+                  {outcome.notes.trim() ? (
+                    <Button variant="ghost" size="sm" onClick={() => setHeaderExpanded((prev) => !prev)}>
+                      {headerExpanded ? "Hide details" : "Show details"}
+                    </Button>
+                  ) : null}
+                  <Button onClick={() => setEditOpen(true)}>Edit outcome</Button>
+                </div>
+              </div>
+            </div>
+
+            {tab === "plan" ? (
+              <div className="xl:min-w-0 xl:self-stretch">
+                <TimelineYardstick
+                  outcome={outcome}
+                  monthKeys={planNavigation.monthKeys}
+                  weekStartsOn={weekStartsOn}
+                  expandedMonths={planNavigation.expandedMonths}
+                  expandedWeekKeys={planNavigation.expandedWeekKeys}
+                  monthly={monthly}
+                  weekly={weekly}
+                  daily={daily}
+                  onJumpMonth={planNavigation.goToMonth}
+                  onJumpWeek={planNavigation.goToWeek}
+                  onJumpDay={planNavigation.goToDay}
+                />
+              </div>
+            ) : null}
           </div>
-          <div className="mt-1 text-sm text-zinc-400">
-            {formatShortDate(outcome.startDate)} → {formatShortDate(outcome.endDate)}
-          </div>
-          <div className="mt-1 text-xs text-zinc-500">{formatDaysOfWeek(outcome.daysOfWeek)}</div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Tabs value={tab} onChange={(next: TabKey) => actions.setActiveTab(next)} />
-          <Button onClick={() => setEditOpen(true)}>Edit</Button>
         </div>
       </div>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto p-4">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
         {tab === "overview" ? <OverviewView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
-        {tab === "plan" ? <PlanView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
+        {tab === "plan" ? <PlanView outcome={outcome} weekStartsOn={weekStartsOn} navigation={planNavigation} /> : null}
         {tab === "calendar" ? <CalendarView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
-        {tab === "backup" ? <BackupView /> : null}
+        {tab === "settings" ? <SettingsView /> : null}
       </div>
 
       <OutcomeModal open={editOpen} onClose={() => setEditOpen(false)} outcome={outcome} />
@@ -362,95 +588,75 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
   );
 }
 
-export default function App() {
-  const [createOpen, setCreateOpen] = React.useState(false);
-  return (
-    <div className="h-dvh w-dvw">
-      <div className="grid h-full w-full grid-cols-1 lg:grid-cols-[320px_1fr]">
-        <div className="hidden lg:block">
-          <Sidebar onNewOutcome={() => setCreateOpen(true)} />
-        </div>
-        <div className="block lg:hidden">
-          <MobileHeader onNewOutcome={() => setCreateOpen(true)} />
-        </div>
-        <Main onNewOutcome={() => setCreateOpen(true)} />
-      </div>
-
-      <OutcomeModal open={createOpen} onClose={() => setCreateOpen(false)} />
-    </div>
-  );
-}
-
 function MobileHeader({ onNewOutcome }: { onNewOutcome: () => void }) {
   const outcomes = useAppState((s) => s.outcomes);
   const selectedOutcomeId = useAppState((s) => s.selectedOutcomeId);
-  const weekStartsOn = useAppState((s) => s.weekStartsOn);
   const [open, setOpen] = React.useState(false);
-
-  const selected = outcomes.find((o) => o.id === selectedOutcomeId);
+  const selected = outcomes.find((outcome) => outcome.id === selectedOutcomeId);
 
   return (
-    <div className="sticky top-0 z-10 border-b border-zinc-900 bg-zinc-950/80 p-3 backdrop-blur">
-      <div className="flex items-center justify-between gap-3">
+    <div className="app-panel rounded-[0.9rem] p-3">
+      <div className="flex items-center gap-2">
         <button
-          className="min-w-0 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-left"
+          type="button"
+          className="min-w-0 flex-1 rounded-[0.65rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-4 py-3 text-left"
           onClick={() => setOpen(true)}
         >
-          <div className="truncate text-sm font-medium">{selected ? selected.title : "Outcomes"}</div>
-          <div className="text-xs text-zinc-400">Tap to switch</div>
+          <div className="truncate text-sm font-semibold">{selected ? selected.title : "Navigate"}</div>
+          <div className="mt-1 text-xs app-muted">Open outcomes and page navigation</div>
         </button>
+
         <Button variant="primary" size="sm" onClick={onNewOutcome}>
           New
         </Button>
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Select an outcome">
-        <div className="grid gap-3">
-          {outcomes.length === 0 ? (
-            <div className="text-sm text-zinc-400">No outcomes yet.</div>
-          ) : (
-            outcomes.map((o) => (
-              <button
-                key={o.id}
-                className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3 text-left hover:bg-zinc-900"
-                onClick={() => {
-                  actions.selectOutcome(o.id);
-                  setOpen(false);
-                }}
-              >
-                <div className="truncate text-sm font-medium">{o.title}</div>
-                <div className="mt-1 text-xs text-zinc-400">
-                  {formatShortDate(o.startDate)} → {formatShortDate(o.endDate)}
-                </div>
-              </button>
-            ))
-          )}
-
-          <Card className="p-3">
-            <div className="text-xs font-medium text-zinc-400">Week start</div>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <button
-                className={[
-                  "rounded-xl border px-3 py-2 text-sm transition",
-                  weekStartsOn === 0 ? "border-zinc-700 bg-zinc-900" : "border-zinc-800 hover:bg-zinc-900"
-                ].join(" ")}
-                onClick={() => actions.setWeekStartsOn(0)}
-              >
-                Sunday
-              </button>
-              <button
-                className={[
-                  "rounded-xl border px-3 py-2 text-sm transition",
-                  weekStartsOn === 1 ? "border-zinc-700 bg-zinc-900" : "border-zinc-800 hover:bg-zinc-900"
-                ].join(" ")}
-                onClick={() => actions.setWeekStartsOn(1)}
-              >
-                Monday
-              </button>
+      <Modal open={open} onClose={() => setOpen(false)} title="Navigate Orama">
+        <div className="grid gap-6">
+          <div>
+            <div className="app-kicker">Outcomes</div>
+            <div className="mt-3">
+              <OutcomeList onSelect={() => setOpen(false)} />
             </div>
-          </Card>
+          </div>
+
+          <WorkspaceNav onSelect={() => setOpen(false)} />
         </div>
       </Modal>
+    </div>
+  );
+}
+
+export default function App() {
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const outcomes = useAppState((s) => s.outcomes);
+  const selectedOutcomeId = useAppState((s) => s.selectedOutcomeId);
+  const themeMode = useAppState((s) => s.ui.themeMode);
+
+  const selectedOutcome = outcomes.find((outcome) => outcome.id === selectedOutcomeId);
+  const themeId = selectedOutcome?.themeId ?? OUTCOME_THEME_ORDER[0];
+
+  return (
+    <div className="app-shell h-dvh w-dvw" data-app-theme={themeMode} style={getOutcomeThemeStyle(themeId)}>
+      <div className="relative grid h-full w-full grid-cols-1 gap-4 p-3 sm:grid-cols-[300px_minmax(0,1fr)] sm:p-4">
+        <div className="hidden min-h-0 sm:block">
+          <Sidebar onNewOutcome={() => setCreateOpen(true)} />
+        </div>
+
+        <div className="flex min-h-0 flex-col gap-4">
+          <div className="sm:hidden">
+            <MobileHeader onNewOutcome={() => setCreateOpen(true)} />
+          </div>
+
+          <main className="app-panel min-h-0 flex-1 overflow-hidden rounded-[1rem]">
+            <div className="app-main-panel h-full rounded-[1rem]">
+              <Main onNewOutcome={() => setCreateOpen(true)} />
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <OutcomeModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   );
 }
