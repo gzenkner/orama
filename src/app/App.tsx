@@ -153,7 +153,7 @@ function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
             className={cn(
               "rounded-[0.7rem] border px-4 py-3 text-left transition",
               active
-                ? "app-tab app-tab-active"
+                ? "app-nav-active"
                 : "border-[color:var(--app-border)] bg-[color:var(--app-elevated)] hover:bg-[color:var(--app-nav-hover)]"
             )}
             onClick={() => {
@@ -190,16 +190,16 @@ function OutcomeList({ onSelect }: { onSelect?: () => void }) {
     <div className="grid gap-2">
       {outcomes.map((outcome) => {
         const active = outcome.id === selectedOutcomeId;
+        const theme = getOutcomeTheme(outcome.themeId);
 
         return (
           <button
             key={outcome.id}
             type="button"
-            style={getOutcomeThemeStyle(outcome.themeId)}
             className={cn(
               "rounded-[0.65rem] border px-3 py-3 text-left transition",
               active
-                ? "app-card-soft"
+                ? "app-nav-active"
                 : "border-[color:var(--app-border)] bg-[color:var(--app-card)] hover:bg-[color:var(--app-nav-hover)]"
             )}
             onClick={() => {
@@ -208,7 +208,10 @@ function OutcomeList({ onSelect }: { onSelect?: () => void }) {
             }}
           >
             <div className="flex items-center gap-3">
-              <span className="inline-flex h-3.5 w-3.5 shrink-0 rounded-full border border-[color:var(--outcome-border)] bg-[color:var(--outcome-accent)]" />
+              <span
+                className="inline-flex h-3.5 w-3.5 shrink-0 rounded-full border"
+                style={{ borderColor: theme.border, background: theme.accent }}
+              />
               <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">{outcome.title}</div>
             </div>
           </button>
@@ -224,7 +227,7 @@ function Sidebar({ onNewOutcome }: { onNewOutcome: () => void }) {
       <div className="rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] p-3">
         <div className="flex items-center justify-between gap-3">
           <img src={oramaLogo} alt="Orama" className="h-8 w-auto" />
-          <Button variant="primary" size="sm" title="Create a new outcome" onClick={onNewOutcome}>
+          <Button variant="secondary" size="sm" title="Create a new outcome" onClick={onNewOutcome}>
             Create new
           </Button>
         </div>
@@ -457,7 +460,9 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
   const daily = useAppState((s) => s.daily);
   const [editOpen, setEditOpen] = React.useState(false);
   const [headerExpanded, setHeaderExpanded] = React.useState(false);
+  const [yardstickExpanded, setYardstickExpanded] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
+  const pendingPlanJumpRef = React.useRef<null | (() => void)>(null);
 
   const outcome = React.useMemo(() => outcomes.find((item) => item.id === selectedOutcomeId), [outcomes, selectedOutcomeId]);
   const planNavigation = usePlanNavigation(outcome, weekStartsOn);
@@ -469,7 +474,26 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
 
   React.useEffect(() => {
     setHeaderExpanded(false);
+    setYardstickExpanded(false);
   }, [outcome?.id]);
+
+  React.useEffect(() => {
+    if (tab !== "plan" || !pendingPlanJumpRef.current) return;
+
+    let frame1 = 0;
+    let frame2 = 0;
+    const jump = pendingPlanJumpRef.current;
+    pendingPlanJumpRef.current = null;
+
+    frame1 = requestAnimationFrame(() => {
+      frame2 = requestAnimationFrame(() => jump());
+    });
+
+    return () => {
+      if (frame1) cancelAnimationFrame(frame1);
+      if (frame2) cancelAnimationFrame(frame2);
+    };
+  }, [tab]);
 
   React.useLayoutEffect(() => {
     const container = scrollRef.current;
@@ -505,58 +529,75 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
   }
 
   const months = monthKeysInRange(outcome.startDate, outcome.endDate);
+  const hasNotes = outcome.notes.trim().length > 0;
+
+  function runPlanJump(jump: () => void) {
+    if (tab === "plan") {
+      requestAnimationFrame(() => jump());
+      return;
+    }
+    pendingPlanJumpRef.current = jump;
+    actions.setActiveTab("plan");
+  }
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
       <div className="border-b border-[color:var(--app-border)] p-4 sm:p-6">
-        <div className={cn("app-card-soft rounded-[0.95rem]", headerExpanded ? "p-5 sm:p-6" : "p-4 sm:p-5")}>
-          <div
-            className={cn(
-              "flex flex-col gap-4",
-              tab === "plan" ? "xl:grid xl:grid-cols-[minmax(260px,1fr)_minmax(0,2fr)] xl:items-start xl:gap-6" : ""
-            )}
-          >
-            <div className="flex flex-col gap-4">
-              <div
-                className={cn(
-                  "flex flex-col gap-4",
-                  tab === "plan" ? "" : "xl:flex-row xl:items-end xl:justify-between"
-                )}
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <OutcomeBadge outcome={outcome} />
-                    <span className="app-pill rounded-[0.55rem] px-3 py-1 text-xs font-semibold">
-                      {months.length} month{months.length === 1 ? "" : "s"}
-                    </span>
-                  </div>
+        <div className="app-card-soft rounded-[0.95rem] p-3 sm:p-4">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <OutcomeBadge outcome={outcome} />
+                <span className="app-pill rounded-[0.55rem] px-3 py-1 text-xs font-semibold">
+                  {months.length} month{months.length === 1 ? "" : "s"}
+                </span>
+              </div>
 
-                  <div className="font-display mt-3 text-xl font-semibold leading-tight sm:text-[1.7rem]">{outcome.title}</div>
-
-                  <div className="mt-3 flex flex-wrap gap-2 text-sm">
-                    <span className="app-pill rounded-[0.55rem] px-3 py-1.5 app-muted">
-                      {formatShortDate(outcome.startDate)} - {formatShortDate(outcome.endDate)}
-                    </span>
-                    <span className="app-pill rounded-[0.55rem] px-3 py-1.5 app-muted">{formatDaysOfWeek(outcome.daysOfWeek)}</span>
-                  </div>
-                  {headerExpanded && outcome.notes.trim() ? (
-                    <div className="mt-4 max-w-3xl text-sm leading-7 app-muted">{outcome.notes}</div>
-                  ) : null}
-                </div>
-
-                <div className="flex shrink-0 items-center gap-2 self-start">
-                  {outcome.notes.trim() ? (
-                    <Button variant="ghost" size="sm" onClick={() => setHeaderExpanded((prev) => !prev)}>
-                      {headerExpanded ? "Hide details" : "Show details"}
-                    </Button>
-                  ) : null}
-                  <Button onClick={() => setEditOpen(true)}>Edit outcome</Button>
-                </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant={headerExpanded ? "secondary" : "ghost"}
+                  size="sm"
+                  disabled={!hasNotes}
+                  title={hasNotes ? "Show or hide outcome details" : "No outcome details"}
+                  onClick={() => setHeaderExpanded((prev) => !prev)}
+                >
+                  Details
+                </Button>
+                <Button
+                  variant={yardstickExpanded ? "secondary" : "ghost"}
+                  size="sm"
+                  title="Show or hide the timeline yardstick"
+                  onClick={() => setYardstickExpanded((prev) => !prev)}
+                >
+                  Yardstick
+                </Button>
+                <Button variant="ghost" size="sm" title="Edit outcome" onClick={() => setEditOpen(true)}>
+                  Edit
+                </Button>
               </div>
             </div>
 
-            {tab === "plan" ? (
-              <div className="xl:min-w-0 xl:self-stretch">
+            <div className="min-w-0">
+              <div className="font-display text-[1.05rem] font-semibold leading-tight sm:text-[1.22rem]">{outcome.title}</div>
+              <div className="mt-1.5 text-sm app-muted">
+                {formatShortDate(outcome.startDate)} - {formatShortDate(outcome.endDate)} • {formatDaysOfWeek(outcome.daysOfWeek)}
+              </div>
+            </div>
+
+            {headerExpanded && hasNotes ? (
+              <div className="max-w-3xl rounded-[0.7rem] border border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] p-4 text-[color:var(--outcome-ink)]">
+                <div
+                  className="text-[11px] font-semibold uppercase tracking-[0.14em]"
+                  style={{ color: "var(--outcome-ink)", opacity: 0.72 }}
+                >
+                  Outcome description
+                </div>
+                <div className="mt-2 whitespace-pre-wrap text-sm leading-6">{outcome.notes}</div>
+              </div>
+            ) : null}
+
+            {yardstickExpanded ? (
+              <div className="pt-1">
                 <TimelineYardstick
                   outcome={outcome}
                   monthKeys={planNavigation.monthKeys}
@@ -566,9 +607,9 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
                   monthly={monthly}
                   weekly={weekly}
                   daily={daily}
-                  onJumpMonth={planNavigation.goToMonth}
-                  onJumpWeek={planNavigation.goToWeek}
-                  onJumpDay={planNavigation.goToDay}
+                  onJumpMonth={(monthKey) => runPlanJump(() => planNavigation.goToMonth(monthKey))}
+                  onJumpWeek={(monthKey, weekStartISO) => runPlanJump(() => planNavigation.goToWeek(monthKey, weekStartISO))}
+                  onJumpDay={(monthKey, weekStartISO, dateISO) => runPlanJump(() => planNavigation.goToDay(monthKey, weekStartISO, dateISO))}
                 />
               </div>
             ) : null}

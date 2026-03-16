@@ -19,17 +19,19 @@ import Button from "../ui/Button";
 import Card from "../ui/Card";
 import Input from "../ui/Input";
 import Progress from "../ui/Progress";
-import { getOutcomeTheme } from "../theme";
+import {
+  dayFillVar,
+  daySurfaceClass,
+  dayVisualState,
+  entryHasPlan,
+  trafficLightSurfaceClass,
+  trafficLightToneFromProgress,
+  trafficLightVar
+} from "../ui/trafficLight";
 
-function dailyHasPlan(entry: DailyGoal | undefined): boolean {
-  if (!entry) return false;
-  const items = Array.isArray(entry.items) && entry.items.length ? entry.items : [entry.title];
-  return items.some((t) => t.trim().length > 0);
-}
-
-function dayLabel(dateISO: string) {
+function dayTabLabel(dateISO: string) {
   const d = parseISODate(dateISO);
-  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function todayISO(): string {
@@ -40,31 +42,19 @@ function isToday(dateISO: string): boolean {
   return dateISO === todayISO();
 }
 
+function elapsedProgress(dateISOs: string[], outcomeId: string, daily: Record<string, DailyGoal>, today: string): { done: number; total: number } {
+  let done = 0;
+  let total = 0;
+  for (const dateISO of dateISOs) {
+    if (dateISO > today) continue;
+    total++;
+    if (daily[`${outcomeId}:${dateISO}`]?.done) done++;
+  }
+  return { done, total };
+}
+
 function clampNum(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-function hexToRgb(hex: string): [number, number, number] {
-  const raw = hex.replace("#", "").trim();
-  const v = raw.length === 3 ? raw.split("").map((c) => c + c).join("") : raw;
-  if (!/^[0-9a-fA-F]{6}$/.test(v)) return [255, 255, 255];
-  return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
-}
-
-function rgbToHex([r, g, b]: [number, number, number]): string {
-  const to2 = (n: number) => clampNum(Math.round(n), 0, 255).toString(16).padStart(2, "0");
-  return `#${to2(r)}${to2(g)}${to2(b)}`;
-}
-
-function mixColor(a: string, b: string, t: number): string {
-  const A = hexToRgb(a);
-  const B = hexToRgb(b);
-  const mixed = [lerp(A[0], B[0], t), lerp(A[1], B[1], t), lerp(A[2], B[2], t)] as [number, number, number];
-  return rgbToHex(mixed);
 }
 
 function Chevron({ open }: { open: boolean }) {
@@ -73,7 +63,7 @@ function Chevron({ open }: { open: boolean }) {
       viewBox="0 0 20 20"
       aria-hidden="true"
       className={[
-        "h-4 w-4 shrink-0 text-[color:var(--app-muted)] transition-transform",
+        "h-4 w-4 shrink-0 text-current opacity-70 transition-transform",
         open ? "rotate-0" : "-rotate-90"
       ].join(" ")}
     >
@@ -83,6 +73,10 @@ function Chevron({ open }: { open: boolean }) {
       />
     </svg>
   );
+}
+
+function FinderTab({ label, className = "" }: { label: string; className?: string }) {
+  return <div className={`app-finder-tab ${className}`.trim()}>{label}</div>;
 }
 
 function TimelineYardstick({
@@ -110,15 +104,14 @@ function TimelineYardstick({
   onJumpWeek: (monthKey: string, weekStartISO: string) => void;
   onJumpDay: (monthKey: string, weekStartISO: string, dateISO: string) => void;
 }) {
-  const theme = getOutcomeTheme(outcome.themeId);
   const startDay = isoToDayNumber(outcome.startDate);
   const endDay = isoToDayNumber(outcome.endDate);
   const span = Math.max(1, endDay - startDay);
 
   const width = 1000;
-  const height = 140;
-  const pad = 28;
-  const y = 78;
+  const height = 148;
+  const pad = 18;
+  const y = 82;
 
   const xForDay = (dayNumber: number) => {
     const t = (dayNumber - startDay) / span;
@@ -148,7 +141,7 @@ function TimelineYardstick({
         total++;
         const entry = daily[`${outcome.id}:${iso}`];
         if (entry?.done) done++;
-        else if (dailyHasPlan(entry)) planned++;
+        else if (entryHasPlan(entry)) planned++;
       }
 
       const doneRatio = total ? done / total : 0;
@@ -176,12 +169,8 @@ function TimelineYardstick({
     return d.toLocaleString(undefined, { month: "short" });
   }
 
-  const base = theme.soft;
-  const doneColor = theme.accentStrong;
-  const plannedColor = theme.accent;
-
   return (
-    <div className="rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] p-3">
+    <div className="-mx-1 rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-2 py-3 sm:-mx-2 sm:px-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <div className="app-kicker">Timeline yardstick</div>
@@ -189,43 +178,74 @@ function TimelineYardstick({
         </div>
         <div className="flex flex-wrap items-center gap-3 text-[11px] app-muted">
           <div className="flex items-center gap-2">
-            <span className="inline-block h-2 w-2 rounded-full" style={{ background: plannedColor }} /> Planned
+            <span className="inline-block h-2 w-2 rounded-full bg-[color:var(--app-border)]" /> Open
           </div>
           <div className="flex items-center gap-2">
-            <span className="inline-block h-2 w-2 rounded-full" style={{ background: doneColor }} /> Done
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: trafficLightVar("red", "fill") }} /> Missed
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: trafficLightVar("amber", "fill") }} /> Planned
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: trafficLightVar("green", "fill") }} /> Done
           </div>
         </div>
       </div>
 
-      <svg className="mt-3 h-28 w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Timeline yardstick">
-        <line x1={pad} y1={y} x2={width - pad} y2={y} stroke="var(--app-border)" strokeWidth={2} />
+      <svg className="mt-3 h-[7.5rem] w-full sm:h-32" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Timeline yardstick">
+        <line
+          x1={pad}
+          y1={y}
+          x2={width - pad}
+          y2={y}
+          stroke="var(--app-border)"
+          strokeWidth={2}
+          opacity={0.5}
+        />
 
         {monthSegments.map((m) => {
           const x1 = xForDay(m.segStart);
           const x2 = xForDay(m.segEnd);
           const len = Math.max(2, x2 - x1);
-          const doneStroke = mixColor(base, doneColor, clampNum(m.doneRatio, 0, 1));
-          const plannedStroke = mixColor(base, plannedColor, clampNum(m.plannedRatio, 0, 1));
           const labelX = x1 + len / 2;
           const wideEnough = len >= 48;
 
           return (
             <g key={m.monthKey}>
+              <line
+                x1={x1}
+                y1={y}
+                x2={x1 + len}
+                y2={y}
+                stroke="var(--app-border)"
+                strokeWidth={12}
+                strokeLinecap="round"
+                opacity={0.3}
+                style={{ cursor: "pointer" }}
+                onClick={() => onJumpMonth(m.monthKey)}
+              >
+                <title>
+                  {m.monthKey} - {m.done}/{m.total} done - {m.planned}/{m.total} planned
+                </title>
+              </line>
+              {m.done > 0 ? (
                 <line
                   x1={x1}
                   y1={y}
                   x2={x1 + len}
                   y2={y}
-                stroke={doneStroke}
-                strokeWidth={12}
-                strokeLinecap="round"
-                style={{ cursor: "pointer" }}
-                onClick={() => onJumpMonth(m.monthKey)}
+                  stroke={trafficLightVar("green", "fill")}
+                  strokeWidth={12}
+                  strokeLinecap="round"
+                  opacity={0.2 + clampNum(m.doneRatio, 0, 1) * 0.8}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => onJumpMonth(m.monthKey)}
                 >
                   <title>
-                  {m.monthKey} - {m.done}/{m.total} done - {m.planned}/{m.total} planned
+                    {m.monthKey} - {m.done}/{m.total} done - {m.planned}/{m.total} planned
                   </title>
                 </line>
+              ) : null}
 
               {m.planned > 0 ? (
                 <line
@@ -233,10 +253,10 @@ function TimelineYardstick({
                   y1={y + 10}
                   x2={x1 + len}
                   y2={y + 10}
-                  stroke={plannedStroke}
+                  stroke={trafficLightVar("amber", "fill")}
                   strokeWidth={4}
                   strokeLinecap="round"
-                  opacity={0.9}
+                  opacity={0.2 + clampNum(m.plannedRatio, 0, 1) * 0.75}
                 />
               ) : null}
 
@@ -247,7 +267,7 @@ function TimelineYardstick({
               ) : null}
 
               {m.monthTitle ? (
-                <circle cx={labelX} cy={y - 10} r={4} fill="var(--app-text)">
+                <circle cx={labelX} cy={y - 10} r={4} fill={trafficLightVar("amber", "fill")}>
                   <title>Monthly goal: {m.monthTitle}</title>
                 </circle>
               ) : null}
@@ -265,7 +285,7 @@ function TimelineYardstick({
             if (dn < startDay || dn > endDay) return null;
             const x = xForDay(dn);
             const title = weekly[`${outcome.id}:${monthKey}:${weekStartISO}`]?.title?.trim() ?? "";
-            const tick = title ? plannedColor : "var(--app-border)";
+            const tick = title ? trafficLightVar("amber", "fill") : "var(--app-border)";
             return (
               <g key={`${monthKey}:${weekStartISO}`}>
                 <line
@@ -291,9 +311,8 @@ function TimelineYardstick({
             const dn = isoToDayNumber(dateISO);
             const x = xForDay(dn);
             const entry = daily[`${outcome.id}:${dateISO}`];
-            const isDone = Boolean(entry?.done);
-            const isPlanned = dailyHasPlan(entry);
-            const fill = isDone ? doneColor : isPlanned ? plannedColor : "var(--app-border)";
+            const state = dayVisualState(entry, dateISO, todayISO);
+            const fill = dayFillVar(state);
             const cy = y - 34 - (idx % 2) * 10;
             return (
               <circle
@@ -306,7 +325,7 @@ function TimelineYardstick({
                 onClick={() => onJumpDay(w.monthKey, w.weekStartISO, dateISO)}
               >
                 <title>
-                  {dateISO} - {isDone ? "done" : isPlanned ? "planned" : "unplanned"} - {entry?.title?.trim() ?? ""}
+                  {dateISO} - {state} - {entry?.title?.trim() ?? ""}
                 </title>
               </circle>
             );
@@ -512,25 +531,18 @@ export default function PlanView({
   const daily = useAppState((s) => s.daily);
   const showMonthlyObjectives = useAppState((s) => s.ui.showMonthlyObjectives);
   const showWeeklyObjectives = useAppState((s) => s.ui.showWeeklyObjectives);
-  const [showOutcomeNotes, setShowOutcomeNotes] = React.useState(false);
+  const today = todayISO();
   const { monthKeys, activeMonthKey, expandedMonths, expandedWeekKeys, goToMonth, goToWeek, goToDay, goRelativeMonth, toggleMonth, toggleWeek, collapseAll } =
     navigation;
-  const outcomeNotes = outcome.notes.trim();
-
-  React.useEffect(() => {
-    setShowOutcomeNotes(false);
-  }, [outcome.id]);
 
   function monthProgress(monthKey: string): { done: number; total: number } {
     const weekStarts = weekStartsForMonth(monthKey, weekStartsOn);
-    let done = 0;
-    let total = 0;
+    const monthDays: string[] = [];
     for (const ws of weekStarts) {
       const days = daysForWeekInMonth(ws, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek);
-      total += days.length;
-      for (const d of days) if (daily[`${outcome.id}:${d}`]?.done) done++;
+      monthDays.push(...days);
     }
-    return { done, total };
+    return elapsedProgress(monthDays, outcome.id, daily, today);
   }
 
   return (
@@ -616,273 +628,265 @@ export default function PlanView({
           {monthKeys.map((monthKey) => {
             const active = activeMonthKey === monthKey;
             const { done, total } = monthProgress(monthKey);
+            const tone = total ? trafficLightToneFromProgress(done / total) : null;
             return (
               <button
                 key={monthKey}
                 type="button"
                 className={[
                   "shrink-0 rounded-[0.6rem] border px-3 py-2 text-left text-sm transition",
-                  active
-                    ? "border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] text-[color:var(--outcome-ink)]"
-                    : "border-[color:var(--app-border)] bg-[color:var(--app-elevated)] hover:bg-[color:var(--app-nav-hover)]"
+                  tone ? trafficLightSurfaceClass(tone) : daySurfaceClass("future"),
+                  active ? "outline outline-1 outline-[color:var(--app-text)]" : "opacity-85 hover:opacity-100"
                 ].join(" ")}
                 onClick={() => goToMonth(monthKey)}
               >
                 <div className="font-semibold">{formatMonthLabel(monthKey)}</div>
-                <div className="mt-1 text-[11px] app-muted">
-                  {total ? `${done}/${total} done` : "No active days"}
+                <div className="mt-1 text-[11px] opacity-75">
+                  {total ? `${done}/${total} done` : "Future days only"}
                 </div>
               </button>
             );
           })}
         </div>
 
-        {outcomeNotes ? (
-          <div className="mt-4 rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="app-kicker">Outcome description</div>
-                <div className="mt-1 text-xs app-muted">Your high-level intent for this outcome.</div>
-              </div>
-              <Button size="sm" variant="ghost" onClick={() => setShowOutcomeNotes((prev) => !prev)} aria-expanded={showOutcomeNotes}>
-                {showOutcomeNotes ? "Hide description" : "Show description"}
-              </Button>
-            </div>
-            {showOutcomeNotes ? <div className="mt-3 whitespace-pre-wrap text-sm leading-6">{outcomeNotes}</div> : null}
-          </div>
-        ) : null}
-
       </Card>
 
-      <div className="grid gap-3">
+      <div className="grid gap-3 pl-6 sm:pl-8">
         {monthKeys.map((monthKey) => {
           const expanded = expandedMonths.has(monthKey);
           const monthStoreKey = `${outcome.id}:${monthKey}`;
           const monthTitle = monthly[monthStoreKey]?.title ?? "";
           const { done, total } = monthProgress(monthKey);
+          const monthTone = total ? trafficLightToneFromProgress(done / total) : null;
           const weekStarts = weekStartsForMonth(monthKey, weekStartsOn).filter(
             (ws) => daysForWeekInMonth(ws, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek).length > 0
           );
 
           return (
-            <Card key={monthKey} id={`month-${monthKey}`} className="overflow-hidden rounded-[0.9rem]">
-              <button
-                className="flex w-full items-center justify-between gap-3 border-b border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-4 py-4 text-left hover:bg-[color:var(--app-nav-hover)]"
-                aria-expanded={expanded}
-                onClick={() => toggleMonth(monthKey)}
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold">{formatMonthLabel(monthKey)}</div>
-                  {showMonthlyObjectives ? (
-                    <div
-                      className={["mt-1 truncate text-xs", monthTitle.trim() ? "" : "app-muted"].join(" ")}
-                      title={monthTitle.trim() ? monthTitle : "No monthly objective yet"}
-                    >
-                      Monthly: {monthTitle.trim() ? monthTitle : "-"}
+            <Card key={monthKey} id={`month-${monthKey}`} className="overflow-visible rounded-[0.9rem]">
+              <div className="relative">
+                <FinderTab label={formatMonthLabel(monthKey)} className="top-4" />
+                <button
+                  className={[
+                    "flex w-full items-center justify-between gap-3 border-b px-4 py-4 pl-8 text-left transition sm:pl-10",
+                    monthTone ? trafficLightSurfaceClass(monthTone) : daySurfaceClass("future"),
+                    expanded ? "outline outline-1 outline-[color:var(--app-text)]" : "hover:opacity-95"
+                  ].join(" ")}
+                  aria-expanded={expanded}
+                  onClick={() => toggleMonth(monthKey)}
+                >
+                  <div className="min-w-0 grid gap-1">
+                    {showMonthlyObjectives ? (
+                      <div
+                        className={["truncate text-xs", monthTitle.trim() ? "" : "opacity-70"].join(" ")}
+                        title={monthTitle.trim() ? monthTitle : "No monthly objective yet"}
+                      >
+                        Monthly: {monthTitle.trim() ? monthTitle : "-"}
+                      </div>
+                    ) : null}
+                    <div className="text-xs opacity-75">
+                      {total ? `${done}/${total} consistent days` : "Future days only"}
                     </div>
-                  ) : null}
-                  <div className="mt-1 text-xs app-muted">
-                    {total ? `${done}/${total} consistent days` : "No days in range"}
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-32">
-                    <Progress value={total ? done / total : 0} />
+                  <div className="flex items-center gap-3">
+                    <div className="w-32">
+                      <Progress value={total ? done / total : 0} tone={total ? undefined : "amber"} />
+                    </div>
+                    <Chevron open={expanded} />
                   </div>
-                  <Chevron open={expanded} />
-                </div>
-              </button>
+                </button>
 
-              {expanded ? (
-                <div className="grid gap-3 p-4">
-                  <div className="grid gap-2">
-                    <div className="app-kicker">Monthly goal</div>
-                    <Input
-                      value={monthTitle}
-                      onChange={(e) => actions.setMonthlyTitle(outcome.id, monthKey, e.target.value)}
-                      placeholder="What outcome matters most this month?"
-                    />
-                  </div>
-
-                  <div className="grid gap-2 pl-3 sm:pl-4">
-                    <div className="app-kicker">Weekly goals</div>
+                {expanded ? (
+                  <div className="grid gap-3 p-4 pl-8 sm:pl-10">
                     <div className="grid gap-2">
-                      {weekStarts.map((weekStartISO) => {
-                        const weekKey = `${outcome.id}:${monthKey}:${weekStartISO}`;
-                        const weekTitle = weekly[weekKey]?.title ?? "";
-                        const weekDays = daysForWeekInMonth(
-                          weekStartISO,
-                          monthKey,
-                          outcome.startDate,
-                          outcome.endDate,
-                          outcome.daysOfWeek
-                        );
-                        const expandedWeek = expandedWeekKeys.has(`${monthKey}:${weekStartISO}`);
-                        const expandedWeekKey = `${monthKey}:${weekStartISO}`;
+                      <div className="app-kicker">Monthly goal</div>
+                      <Input
+                        value={monthTitle}
+                        onChange={(e) => actions.setMonthlyTitle(outcome.id, monthKey, e.target.value)}
+                        placeholder="What outcome matters most this month?"
+                      />
+                    </div>
 
-                        const doneDays = weekDays.reduce(
-                          (acc, d) => acc + (daily[`${outcome.id}:${d}`]?.done ? 1 : 0),
-                          0
-                        );
+                    <div className="grid gap-2 pl-2 sm:pl-3">
+                      <div className="app-kicker">Weekly goals</div>
+                      <div className="grid gap-2">
+                        {weekStarts.map((weekStartISO) => {
+                          const weekKey = `${outcome.id}:${monthKey}:${weekStartISO}`;
+                          const weekTitle = weekly[weekKey]?.title ?? "";
+                          const weekDays = daysForWeekInMonth(
+                            weekStartISO,
+                            monthKey,
+                            outcome.startDate,
+                            outcome.endDate,
+                            outcome.daysOfWeek
+                          );
+                          const expandedWeek = expandedWeekKeys.has(`${monthKey}:${weekStartISO}`);
+                          const expandedWeekKey = `${monthKey}:${weekStartISO}`;
 
-                        return (
-                          <Card key={weekKey} id={`week-${monthKey}-${weekStartISO}`} className="overflow-hidden rounded-[0.8rem]">
-		                            <button
-		                              className="flex w-full items-center justify-between gap-3 border-b border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-4 py-4 text-left hover:bg-[color:var(--app-nav-hover)]"
-		                              aria-expanded={expandedWeek}
-		                              onClick={() => toggleWeek(expandedWeekKey)}
-		                            >
-		                              <div className="min-w-0">
-		                                <div className="truncate text-sm font-semibold">{formatWeekLabel(weekStartISO)}</div>
-		                                {showWeeklyObjectives ? (
-		                                  <div
-		                                    className={["mt-1 truncate text-xs", weekTitle.trim() ? "" : "app-muted"].join(" ")}
-		                                    title={weekTitle.trim() ? weekTitle : "No weekly objective yet"}
-		                                  >
-		                                    Weekly: {weekTitle.trim() ? weekTitle : "-"}
-		                                  </div>
-		                                ) : null}
-		                                <div className="mt-1 text-xs app-muted">
-		                                  {weekDays.length ? `${doneDays}/${weekDays.length} days done` : "No days in this month-week"}
-		                                </div>
-	                              </div>
-                              <div className="flex items-center gap-3">
-                                <div className="w-24">
-                                  <Progress value={weekDays.length ? doneDays / weekDays.length : 0} />
-                                </div>
-                                <Chevron open={expandedWeek} />
-                              </div>
-                            </button>
+                          const { done: doneDays, total: elapsedWeekDays } = elapsedProgress(weekDays, outcome.id, daily, today);
+                          const weekTone = elapsedWeekDays ? trafficLightToneFromProgress(doneDays / elapsedWeekDays) : null;
 
-		                            {expandedWeek ? (
-		                              <div className="grid gap-3 p-4">
-		                                <div className="grid gap-2">
-		                                  <div className="app-kicker">Weekly goal</div>
-		                                  <Input
-		                                    value={weekTitle}
-		                                    onChange={(e) => actions.setWeeklyTitle(outcome.id, monthKey, weekStartISO, e.target.value)}
-                                    placeholder="What would make this week a win?"
-                                  />
-                                </div>
-
-		                                <div className="grid gap-2 pl-3 sm:pl-4">
-		                                  <div className="flex items-center justify-between gap-3">
-		                                    <div className="app-kicker">Daily commitments</div>
-		                                    <Button
-		                                      size="sm"
-		                                      onClick={() => {
-                                        const first = weekDays[0];
-                                        if (!first) return;
-                                        const el = document.getElementById(`day-${first}`);
-                                        el?.scrollIntoView({ block: "center" });
-                                      }}
-                                    >
-                                      First day
-                                    </Button>
+                          return (
+                            <Card key={weekKey} id={`week-${monthKey}-${weekStartISO}`} className="overflow-visible rounded-[0.8rem]">
+                              <div className="relative">
+                                <FinderTab label={formatWeekLabel(weekStartISO)} className="top-4" />
+                                <button
+                                  className={[
+                                    "flex w-full items-center justify-between gap-3 border-b px-4 py-4 pl-8 text-left transition sm:pl-10",
+                                    weekTone ? trafficLightSurfaceClass(weekTone) : daySurfaceClass("future"),
+                                    expandedWeek ? "outline outline-1 outline-[color:var(--app-text)]" : "hover:opacity-95"
+                                  ].join(" ")}
+                                  aria-expanded={expandedWeek}
+                                  onClick={() => toggleWeek(expandedWeekKey)}
+                                >
+                                  <div className="min-w-0 grid gap-1">
+                                    {showWeeklyObjectives ? (
+                                      <div
+                                        className={["truncate text-xs", weekTitle.trim() ? "" : "opacity-70"].join(" ")}
+                                        title={weekTitle.trim() ? weekTitle : "No weekly objective yet"}
+                                      >
+                                        Weekly: {weekTitle.trim() ? weekTitle : "-"}
+                                      </div>
+                                    ) : null}
+                                    <div className="text-xs opacity-75">
+                                      {elapsedWeekDays ? `${doneDays}/${elapsedWeekDays} days done` : "Future days only"}
+                                    </div>
                                   </div>
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-24">
+                                      <Progress value={elapsedWeekDays ? doneDays / elapsedWeekDays : 0} tone={elapsedWeekDays ? undefined : "amber"} />
+                                    </div>
+                                    <Chevron open={expandedWeek} />
+                                  </div>
+                                </button>
 
-                                  <div className="grid gap-2">
-                                    {weekDays.map((dateISO) => {
-                                      const dayKey = `${outcome.id}:${dateISO}`;
-                                      const entry = daily[dayKey] ?? { title: "", done: false };
-                                      const items =
-                                        Array.isArray(entry.items) && entry.items.length ? entry.items : [entry.title ?? ""];
-                                      const itemsDone = Array.isArray(entry.itemsDone) ? entry.itemsDone : [];
-		                                      return (
-		                                        <div
-		                                          key={dateISO}
-		                                          id={`day-${dateISO}`}
-		                                          className={[
-		                                            "flex flex-col gap-2 rounded-[0.7rem] border p-3 sm:flex-row sm:items-start",
-		                                            isToday(dateISO)
-		                                              ? "border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)]"
-		                                              : "border-[color:var(--app-border)] bg-[color:var(--app-elevated)]"
-		                                          ].join(" ")}
-		                                        >
-		                                          <div className="flex items-center gap-3 sm:w-44">
-		                                            <button
-		                                              className={[
-		                                                "inline-flex h-6 w-6 items-center justify-center rounded-[0.45rem] border transition",
-		                                                entry.done
-		                                                  ? "border-[color:var(--outcome-accent-strong)] bg-[color:var(--outcome-accent-strong)] text-[#201611]"
-		                                                  : "border-[color:var(--app-border)] bg-[color:var(--app-input)]"
-		                                              ].join(" ")}
-		                                              aria-label={entry.done ? "Mark not done" : "Mark done"}
-		                                              onClick={() => actions.toggleDailyDone(outcome.id, dateISO)}
-		                                            >
-		                                              {entry.done ? "x" : ""}
-		                                            </button>
-		                                            <div className="text-sm font-medium">{dayLabel(dateISO)}</div>
-		                                          </div>
-                                          <div className="min-w-0 flex-1">
-                                            <div className="grid gap-2">
-                                              {items.map((t, idx) => {
-                                                const done = Boolean(itemsDone[idx]);
-		                                                return (
-		                                                  <div key={idx} className="flex items-center gap-2">
-		                                                    <button
-		                                                      type="button"
-		                                                      className={[
-		                                                        "app-check inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition focus:outline-none",
-		                                                        done ? "" : ""
-		                                                      ].join(" ")}
-		                                                      data-state={done ? "done" : "none"}
-		                                                      aria-label={done ? `Mark task ${idx + 1} not done` : `Mark task ${idx + 1} done`}
-		                                                      aria-pressed={done}
-		                                                      title={done ? "Mark not done" : "Mark done"}
-		                                                      onClick={() => actions.toggleDailyItemDone(outcome.id, dateISO, idx)}
-		                                                    >
-		                                                      x
-		                                                    </button>
-                                                    <Input
-		                                                      value={t}
-		                                                      onChange={(e) => actions.setDailyItem(outcome.id, dateISO, idx, e.target.value)}
-		                                                      placeholder={idx === 0 ? "Daily: the smallest thing you'll actually do." : "Another tiny task..."}
-		                                                      className={[
-		                                                        "h-9 flex-1 rounded-[0.55rem] px-2 text-[13px]",
-		                                                        done ? "line-through opacity-70" : ""
-		                                                      ].join(" ")}
-		                                                      aria-label={`Daily task ${idx + 1}`}
-		                                                    />
-		                                                    <button
-		                                                      type="button"
-		                                                      className="app-ghost-outline inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[0.45rem] text-sm transition focus:outline-none"
-		                                                      aria-label={`Delete daily task ${idx + 1}`}
-		                                                      title="Delete daily task"
-		                                                      onClick={() => actions.removeDailyItem(outcome.id, dateISO, idx)}
-                                                    >
-                                                      -
-                                                    </button>
-                                                  </div>
-                                                );
-                                              })}
-		                                              <div className="flex justify-end">
-		                                                <button
-		                                                  type="button"
-		                                                  className="app-ghost-outline inline-flex h-7 w-7 items-center justify-center rounded-[0.45rem] text-sm transition focus:outline-none"
-		                                                  aria-label="Add daily task"
-		                                                  title="Add daily task"
-		                                                  onClick={() => actions.addDailyItem(outcome.id, dateISO)}
+                                {expandedWeek ? (
+                                  <div className="grid gap-3 p-4 pl-8 sm:pl-10">
+                                    <div className="grid gap-2">
+                                      <div className="app-kicker">Weekly goal</div>
+                                      <Input
+                                        value={weekTitle}
+                                        onChange={(e) => actions.setWeeklyTitle(outcome.id, monthKey, weekStartISO, e.target.value)}
+                                        placeholder="What would make this week a win?"
+                                      />
+                                    </div>
+
+                                    <div className="grid gap-2 pl-2 sm:pl-3">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="app-kicker">Daily commitments</div>
+                                        <Button
+                                          size="sm"
+                                          onClick={() => {
+                                            const first = weekDays[0];
+                                            if (!first) return;
+                                            const el = document.getElementById(`day-${first}`);
+                                            el?.scrollIntoView({ block: "center" });
+                                          }}
+                                        >
+                                          First day
+                                        </Button>
+                                      </div>
+
+                                      <div className="grid gap-2">
+                                        {weekDays.map((dateISO) => {
+                                          const dayKey = `${outcome.id}:${dateISO}`;
+                                          const entry = daily[dayKey] ?? { title: "", done: false };
+                                          const entryState = dayVisualState(entry, dateISO, todayISO());
+                                          const items =
+                                            Array.isArray(entry.items) && entry.items.length ? entry.items : [entry.title ?? ""];
+                                          const itemsDone = Array.isArray(entry.itemsDone) ? entry.itemsDone : [];
+                                          return (
+                                            <div
+                                              key={dateISO}
+                                              id={`day-${dateISO}`}
+                                              className={[
+                                                "relative flex flex-col gap-2 rounded-[0.7rem] border p-3 pl-8 sm:flex-row sm:items-start sm:pl-10",
+                                                daySurfaceClass(entryState),
+                                                isToday(dateISO) ? "outline outline-1 outline-[color:var(--app-text)]" : ""
+                                              ].join(" ")}
+                                            >
+                                              <FinderTab label={dayTabLabel(dateISO)} className="top-3" />
+                                              <div className="flex items-center gap-3 sm:shrink-0">
+                                                <button
+                                                  className="app-check inline-flex h-6 w-6 items-center justify-center rounded-[0.45rem] border text-sm font-semibold transition"
+                                                  data-state={entry.done ? "done" : entryHasPlan(entry) ? "planned" : "none"}
+                                                  aria-label={entry.done ? "Mark not done" : "Mark done"}
+                                                  onClick={() => actions.toggleDailyDone(outcome.id, dateISO)}
                                                 >
-                                                  +
+                                                  {entry.done ? "x" : ""}
                                                 </button>
                                               </div>
+                                              <div className="min-w-0 flex-1">
+                                                <div className="grid gap-2">
+                                                  {items.map((t, idx) => {
+                                                    const done = Boolean(itemsDone[idx]);
+                                                    return (
+                                                      <div key={idx} className="flex items-center gap-2">
+                                                        <button
+                                                          type="button"
+                                                          className={[
+                                                            "app-check inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition focus:outline-none",
+                                                            done ? "" : ""
+                                                          ].join(" ")}
+                                                          data-state={done ? "done" : t.trim().length ? "planned" : "none"}
+                                                          aria-label={done ? `Mark task ${idx + 1} not done` : `Mark task ${idx + 1} done`}
+                                                          aria-pressed={done}
+                                                          title={done ? "Mark not done" : "Mark done"}
+                                                          onClick={() => actions.toggleDailyItemDone(outcome.id, dateISO, idx)}
+                                                        >
+                                                          x
+                                                        </button>
+                                                        <Input
+                                                          value={t}
+                                                          onChange={(e) => actions.setDailyItem(outcome.id, dateISO, idx, e.target.value)}
+                                                          placeholder={idx === 0 ? "Daily: the smallest thing you'll actually do." : "Another tiny task..."}
+                                                          className={[
+                                                            "h-9 flex-1 rounded-[0.55rem] px-2 text-[13px]",
+                                                            done ? "line-through opacity-70" : ""
+                                                          ].join(" ")}
+                                                          aria-label={`Daily task ${idx + 1}`}
+                                                        />
+                                                        <button
+                                                          type="button"
+                                                          className="app-ghost-outline inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[0.45rem] text-sm transition focus:outline-none"
+                                                          aria-label={`Delete daily task ${idx + 1}`}
+                                                          title="Delete daily task"
+                                                          onClick={() => actions.removeDailyItem(outcome.id, dateISO, idx)}
+                                                        >
+                                                          -
+                                                        </button>
+                                                      </div>
+                                                    );
+                                                  })}
+                                                  <div className="flex justify-end">
+                                                    <button
+                                                      type="button"
+                                                      className="app-ghost-outline inline-flex h-7 w-7 items-center justify-center rounded-[0.45rem] text-sm transition focus:outline-none"
+                                                      aria-label="Add daily task"
+                                                      title="Add daily task"
+                                                      onClick={() => actions.addDailyItem(outcome.id, dateISO)}
+                                                    >
+                                                      +
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              </div>
                                             </div>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
+                                ) : null}
                               </div>
-                            ) : null}
-                          </Card>
-                        );
-                      })}
+                            </Card>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
             </Card>
           );
         })}

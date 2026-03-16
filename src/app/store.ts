@@ -16,14 +16,6 @@ type Store = {
   subscribe: (listener: Listener) => () => void;
 };
 
-function normalizeActiveTab(activeTab: unknown): AppTab {
-  if (activeTab === "backup") return "settings";
-  if (activeTab === "overview" || activeTab === "plan" || activeTab === "calendar" || activeTab === "settings") {
-    return activeTab;
-  }
-  return "overview";
-}
-
 function safeUUID(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `id_${Math.random().toString(16).slice(2)}_${Date.now()}`;
@@ -78,7 +70,11 @@ function readState(): State {
       ui: {
         ...defaultState().ui,
         ...(parsed as Partial<State>).ui,
-        activeTab: normalizeActiveTab((parsed as Partial<State>).ui?.activeTab)
+        activeTab: "overview",
+        scrollTopByTab: {
+          ...((parsed as Partial<State>).ui?.scrollTopByTab ?? {}),
+          overview: 0
+        }
       },
       outcomes: Array.isArray(parsed.outcomes)
         ? parsed.outcomes.map((outcome, index) =>
@@ -170,7 +166,15 @@ export const actions = {
     store.set((prev) => ({
       ...prev,
       outcomes: [outcome, ...prev.outcomes],
-      selectedOutcomeId: outcome.id
+      selectedOutcomeId: outcome.id,
+      ui: {
+        ...prev.ui,
+        activeTab: "overview",
+        scrollTopByTab: {
+          ...prev.ui.scrollTopByTab,
+          overview: 0
+        }
+      }
     }));
     return outcome.id;
   },
@@ -306,7 +310,11 @@ export const actions = {
       ui: {
         ...defaultState().ui,
         ...(parsed as Partial<State>).ui,
-        activeTab: normalizeActiveTab((parsed as Partial<State>).ui?.activeTab)
+        activeTab: "overview",
+        scrollTopByTab: {
+          ...((parsed as Partial<State>).ui?.scrollTopByTab ?? {}),
+          overview: 0
+        }
       },
       outcomes: Array.isArray(parsed.outcomes)
         ? parsed.outcomes.map((outcome, index) =>

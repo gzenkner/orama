@@ -18,22 +18,20 @@ import Card from "../ui/Card";
 import Input from "../ui/Input";
 import Modal from "../ui/Modal";
 import { cn } from "../ui/cn";
+import { daySurfaceClass, dayVisualState, type DayVisualState, trafficLightVar } from "../ui/trafficLight";
 
-type DayState = "out" | "none" | "planned" | "done";
+type DayState = "out" | DayVisualState;
 
-function dailyHasPlan(entry: DailyGoal | undefined): boolean {
-  if (!entry) return false;
-  const items = Array.isArray(entry.items) && entry.items.length ? entry.items : [entry.title];
-  return items.some((title) => title.trim().length > 0);
-}
-
-function dayState(outcomeId: string, dateISO: string, daily: Record<string, DailyGoal>, inRange: boolean): DayState {
+function dayState(
+  outcomeId: string,
+  dateISO: string,
+  daily: Record<string, DailyGoal>,
+  inRange: boolean,
+  todayISO: string
+): DayState {
   if (!inRange) return "out";
   const entry = daily[`${outcomeId}:${dateISO}`];
-  if (!entry) return "none";
-  if (entry.done) return "done";
-  if (dailyHasPlan(entry)) return "planned";
-  return "none";
+  return dayVisualState(entry, dateISO, todayISO);
 }
 
 function isoInRange(dateISO: string, startISO: string, endISO: string): boolean {
@@ -85,6 +83,7 @@ function YearCalendar({
   onSelectDay: (dateISO: string) => void;
 }) {
   const daily = useAppState((s) => s.daily);
+  const todayISO = toISODate(new Date());
 
   const months = Array.from({ length: 12 }, (_, index) => index);
   const weekDayLabels = Array.from({ length: 7 }, (_, index) => {
@@ -127,13 +126,15 @@ function YearCalendar({
                   const dateISO = toISODate(new Date(year, monthIndex, dayNum));
                   const inRange = isoInRange(dateISO, outcome.startDate, outcome.endDate);
                   const active = inRange && isDateActive(dateISO, outcome.daysOfWeek);
-                  const state = dayState(outcome.id, dateISO, daily, active);
+                  const state = dayState(outcome.id, dateISO, daily, active, todayISO);
 
                   const styles: Record<DayState, string> = {
                     out: "border-transparent bg-transparent opacity-35",
-                    none: "border-[color:var(--app-border)] bg-[color:var(--app-input)] hover:bg-[color:var(--app-nav-hover)]",
-                    planned: "border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] text-[color:var(--outcome-ink)] hover:opacity-90",
-                    done: "border-[color:var(--outcome-accent-strong)] bg-[color:var(--outcome-accent-strong)] text-[#201611]"
+                    open: "border-[color:var(--app-border)] bg-[color:var(--app-elevated)] text-[color:var(--app-text)] hover:bg-[color:var(--app-nav-hover)]",
+                    future: "border-[color:var(--app-border)] border-dashed bg-[color:var(--app-card)] text-[color:var(--app-text)] opacity-75",
+                    missed: `${daySurfaceClass("missed")} hover:opacity-95`,
+                    planned: `${daySurfaceClass("planned")} hover:opacity-95`,
+                    done: daySurfaceClass("done")
                   };
 
                   return (
@@ -224,7 +225,7 @@ function DayModal({
                   <button
                     type="button"
                     className="app-check inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[0.4rem] transition"
-                    data-state={itemDone ? "done" : "none"}
+                    data-state={itemDone ? "done" : title.trim().length ? "planned" : "none"}
                     aria-label={itemDone ? `Mark task ${index + 1} not done` : `Mark task ${index + 1} done`}
                     aria-pressed={itemDone}
                     onClick={() => actions.toggleDailyItemDone(outcome.id, dateISO, index)}
@@ -347,13 +348,28 @@ export default function CalendarView({ outcome, weekStartsOn }: { outcome: Outco
 
         <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
           <div className="flex items-center gap-2 app-muted">
-            <span className="inline-block h-3 w-3 rounded border border-[color:var(--app-border)] bg-[color:var(--app-input)]" /> Unplanned
+            <span className="inline-block h-3 w-3 rounded border border-[color:var(--app-border)] bg-[color:var(--app-elevated)]" /> Open
           </div>
           <div className="flex items-center gap-2 app-muted">
-            <span className="inline-block h-3 w-3 rounded border border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)]" /> Planned
+            <span
+              className="inline-block h-3 w-3 rounded border"
+              style={{ borderColor: trafficLightVar("red", "border"), background: trafficLightVar("red", "bg") }}
+            />{" "}
+            Missed
           </div>
           <div className="flex items-center gap-2 app-muted">
-            <span className="inline-block h-3 w-3 rounded border border-[color:var(--outcome-accent-strong)] bg-[color:var(--outcome-accent-strong)]" /> Done
+            <span
+              className="inline-block h-3 w-3 rounded border"
+              style={{ borderColor: trafficLightVar("amber", "border"), background: trafficLightVar("amber", "bg") }}
+            />{" "}
+            Planned
+          </div>
+          <div className="flex items-center gap-2 app-muted">
+            <span
+              className="inline-block h-3 w-3 rounded border"
+              style={{ borderColor: trafficLightVar("green", "border"), background: trafficLightVar("green", "fill") }}
+            />{" "}
+            Done
           </div>
         </div>
       </Card>

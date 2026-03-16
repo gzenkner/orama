@@ -28,6 +28,18 @@
     --outcome-ink: #6a3e27;
     --outcome-glow: rgba(215, 134, 99, 0.16);
     --outcome-glow-strong: rgba(215, 134, 99, 0.3);
+    --app-signal-red-bg: #fff1f5;
+    --app-signal-red-border: #e7bcc9;
+    --app-signal-red-fill: #cf728c;
+    --app-signal-red-text: #6b3243;
+    --app-signal-amber-bg: #fff6de;
+    --app-signal-amber-border: #e5cf97;
+    --app-signal-amber-fill: #cb9a1d;
+    --app-signal-amber-text: #6f5004;
+    --app-signal-green-bg: #eaf7ef;
+    --app-signal-green-border: #abd2b8;
+    --app-signal-green-fill: #2f8d59;
+    --app-signal-green-text: #23583a;
   }
 
   html,
@@ -95,6 +107,8 @@
     --app-shadow: rgba(74, 53, 41, 0.1);
     --app-backdrop: rgba(246, 239, 231, 0.72);
     --app-nav-hover: rgba(52, 37, 28, 0.05);
+    --app-nav-active-bg: rgba(52, 37, 28, 0.08);
+    --app-nav-active-border: rgba(92, 76, 62, 0.18);
   }
 
   .app-shell[data-app-theme="black"] {
@@ -111,6 +125,20 @@
     --app-shadow: rgba(0, 0, 0, 0.44);
     --app-backdrop: rgba(12, 11, 10, 0.78);
     --app-nav-hover: rgba(255, 255, 255, 0.05);
+    --app-nav-active-bg: rgba(255, 255, 255, 0.08);
+    --app-nav-active-border: rgba(255, 255, 255, 0.14);
+    --app-signal-red-bg: rgba(207, 114, 140, 0.18);
+    --app-signal-red-border: rgba(207, 114, 140, 0.55);
+    --app-signal-red-fill: #f3a4bb;
+    --app-signal-red-text: #ffdbe5;
+    --app-signal-amber-bg: rgba(203, 154, 29, 0.17);
+    --app-signal-amber-border: rgba(203, 154, 29, 0.54);
+    --app-signal-amber-fill: #ffd166;
+    --app-signal-amber-text: #ffedbd;
+    --app-signal-green-bg: rgba(47, 141, 89, 0.17);
+    --app-signal-green-border: rgba(47, 141, 89, 0.56);
+    --app-signal-green-fill: #74e1a2;
+    --app-signal-green-text: #d5f7e2;
   }
 
   .app-panel {
@@ -275,12 +303,41 @@
     box-shadow: inset 0 0 0 1px var(--outcome-glow);
   }
 
+  .app-nav-active {
+    border-color: var(--app-nav-active-border);
+    background: var(--app-nav-active-bg);
+    color: var(--app-text);
+  }
+
+  .app-finder-tab {
+    pointer-events: none;
+    position: absolute;
+    left: 0;
+    z-index: 10;
+    transform: translateX(calc(-100% + 0.95rem));
+    border: 1px solid var(--app-border);
+    border-right: 0;
+    border-radius: 0.5rem 0 0 0.5rem;
+    background: var(--app-card);
+    color: var(--app-subtle);
+    box-shadow: 0 10px 24px var(--app-shadow);
+    max-width: 11rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0.32rem 0.6rem;
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 1.15;
+  }
+
   .app-progress-track {
     background: var(--app-nav-hover);
   }
 
   .app-progress-fill {
-    background: var(--outcome-accent-strong);
+    background: var(--app-signal-red-fill);
   }
 
   .app-check {
@@ -290,15 +347,15 @@
   }
 
   .app-check[data-state="planned"] {
-    border-color: var(--outcome-border);
-    background: var(--outcome-soft);
-    color: var(--outcome-ink);
+    border-color: var(--app-signal-amber-border);
+    background: var(--app-signal-amber-bg);
+    color: transparent;
   }
 
   .app-check[data-state="done"] {
-    border-color: var(--outcome-accent-strong);
-    background: var(--outcome-accent-strong);
-    color: #201611;
+    border-color: var(--app-signal-green-border);
+    background: var(--app-signal-green-fill);
+    color: #102318;
   }
 
   .app-ghost-outline {
