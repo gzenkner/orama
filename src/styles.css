@@ -309,6 +309,46 @@
     color: var(--app-text);
   }
 
+  .app-nav-studio {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .app-nav-studio::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      linear-gradient(135deg, transparent 0 52%, var(--outcome-glow) 52% 68%, transparent 68% 100%),
+      linear-gradient(90deg, var(--outcome-glow), transparent 38%);
+    opacity: 0.95;
+    transition: opacity 160ms ease;
+  }
+
+  .app-nav-studio:hover::before {
+    opacity: 1;
+  }
+
+  .app-nav-studio-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    padding: 0.18rem 0.52rem;
+    border: 1px solid var(--outcome-border);
+    border-radius: 999px;
+    background: var(--outcome-soft);
+    color: var(--outcome-ink);
+    box-shadow: 0 8px 18px var(--outcome-glow);
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
   .app-finder-tab {
     pointer-events: none;
     position: absolute;

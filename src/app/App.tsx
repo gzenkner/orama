@@ -20,6 +20,7 @@ import { TAB_META } from "./ui/Tabs";
 import Textarea from "./ui/Textarea";
 import OverviewView from "./views/OverviewView";
 import PlanView, { TimelineYardstick, usePlanNavigation } from "./views/PlanView";
+import WizardView from "./views/WizardView";
 import CalendarView from "./views/CalendarView";
 import BackupView from "./views/BackupView";
 import { cn } from "./ui/cn";
@@ -146,12 +147,14 @@ function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
       <div className="app-kicker">Workspace</div>
       {keys.map((key) => {
         const active = activeTab === key;
+        const isStudio = key === "wizard";
         return (
           <button
             key={key}
             type="button"
             className={cn(
               "rounded-[0.7rem] border px-4 py-3 text-left transition",
+              isStudio && "app-nav-studio",
               active
                 ? "app-nav-active"
                 : "border-[color:var(--app-border)] bg-[color:var(--app-elevated)] hover:bg-[color:var(--app-nav-hover)]"
@@ -161,7 +164,10 @@ function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
               onSelect?.();
             }}
           >
-            <div className="text-sm font-semibold">{TAB_META[key].label}</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold">{TAB_META[key].label}</div>
+              {isStudio ? <span className="app-nav-studio-badge">AI</span> : null}
+            </div>
             <div className="mt-1 text-xs app-muted">{TAB_META[key].hint}</div>
           </button>
         );
@@ -620,6 +626,7 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
         {tab === "overview" ? <OverviewView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
         {tab === "plan" ? <PlanView outcome={outcome} weekStartsOn={weekStartsOn} navigation={planNavigation} /> : null}
+        {tab === "wizard" ? <WizardView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
         {tab === "calendar" ? <CalendarView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
         {tab === "settings" ? <SettingsView /> : null}
       </div>

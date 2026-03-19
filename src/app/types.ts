@@ -2,7 +2,7 @@ export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday ... 6 = Saturda
 
 export type WeekStartsOn = 0 | 1; // 0 = Sunday (US), 1 = Monday
 
-export type AppTab = "overview" | "plan" | "calendar" | "settings";
+export type AppTab = "overview" | "plan" | "wizard" | "calendar" | "settings";
 
 export type AppThemeMode = "white" | "black";
 
