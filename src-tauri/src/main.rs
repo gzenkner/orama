@@ -13,6 +13,7 @@ use tauri::Manager;
 const DEFAULT_PLANNING_MODEL: &str = "gemma3:12b";
 const OLLAMA_WARMUP_PROMPT: &str = "Planning assistant warmup. Reply only with READY.";
 static WARMUP_IN_FLIGHT: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+static CANCELED_COACH_REQUESTS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +36,48 @@ struct MonthlyWizardRequest {
   context: String,
   months: Vec<WizardTarget>,
   extra_context: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OutcomeCoachRequest {
+  request_id: String,
+  model: String,
+  outcome: OutcomeCoachTarget,
+  current_draft: Option<String>,
+  messages: Vec<OutcomeCoachTurnMessage>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OutcomeCoachTarget {
+  title: String,
+  notes: String,
+  start_date: String,
+  end_date: String,
+  days_of_week: Vec<u8>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OutcomeCoachTurnMessage {
+  role: String,
+  content: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OutcomeCoachResponse {
+  model: String,
+  reply: String,
+  draft_description: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OutcomeCoachPayload {
+  reply: String,
+  draft_description: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -177,6 +220,10 @@ fn warmup_models() -> &'static Mutex<HashSet<String>> {
   WARMUP_IN_FLIGHT.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
+fn canceled_coach_requests() -> &'static Mutex<HashSet<String>> {
+  CANCELED_COACH_REQUESTS.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
 fn configured_model(model: &str) -> Result<&str, String> {
   let trimmed = model.trim();
   if trimmed.is_empty() {
@@ -277,6 +324,18 @@ fn monthly_plan_schema() -> Value {
   })
 }
 
+fn outcome_coach_schema() -> Value {
+  json!({
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["reply", "draftDescription"],
+    "properties": {
+      "reply": { "type": "string" },
+      "draftDescription": { "type": "string" }
+    }
+  })
+}
+
 fn question_system_prompt(mode: &str) -> Result<String, String> {
   Ok(format!(
     concat!(
@@ -325,6 +384,43 @@ fn monthly_plan_system_prompt() -> String {
     "Keep milestone titles short, concrete, and distinct.\n",
     "Avoid vague filler like 'make progress', 'stay consistent', or 'maintain momentum' unless the milestone names the real work.\n",
     "Respect the provided month IDs exactly and keep their order.\n",
+    "Return valid JSON only."
+  )
+  .to_string()
+}
+
+fn outcome_coach_system_prompt() -> String {
+  concat!(
+    "You are Orama's outcome coach.\n",
+    "Talk like a direct teammate in a real chat.\n",
+    "Use short sentences.\n",
+    "Keep replies concise.\n",
+    "Do not flatter the user.\n",
+    "Do not hype them up.\n",
+    "Do not say things like wow, amazing, or great experience.\n",
+    "Do not use bullets in the chat unless the user asks for them.\n",
+    "Do not sound like a framework or a questionnaire.\n",
+    "Ask one focused follow-up at a time when needed.\n",
+    "Do not rush to summarize after one or two answers.\n",
+    "Do not ask 'does that feel right' too early.\n",
+    "Keep guiding until you have enough detail to build a useful planning brief.\n",
+    "Adapt immediately when the user asks for simpler, shorter, or more direct language.\n",
+    "Read short or fragmentary answers in context.\n",
+    "If the user says things like 'location wise', 'comp wise', or 'team wise', treat that as a constraint on the previous point, not as a brand new topic.\n",
+    "If the user's meaning is directionally clear, make the reasonable interpretation and move forward.\n",
+    "Do not get stuck on pedantic clarifications.\n",
+    "Say the interpretation plainly, then ask the next useful question.\n",
+    "Your job is not just to polish one sentence.\n",
+    "Your job is to help the user turn an outcome into a comprehensive goal brief they can later break into months, weeks, and days.\n",
+    "Pull out the finish line, why it matters, constraints, non-negotiables, strengths to lean on, gaps to close, proof to build, and the main goals that need to happen before the deadline.\n",
+    "When the user is talking about a career move, role search, or project, help define the actual goals and proof needed to land it.\n",
+    "For career outcomes, usually cover the target role, location or time-zone limits, compensation, company or work preferences, strengths to lean on, gaps to close, proof to build, and the search or interview goals.\n",
+    "Once role and location are roughly clear, move quickly into proof, gaps, and the major goals needed to land the role.\n",
+    "Example: if the user says 'I want a remote data engineer role, location wise' and then 'UTC +/- 2 hours', interpret that as a remote role with working-hours overlap close to UTC and move on.\n",
+    "Maintain a working draft that gets richer as the conversation gets richer.\n",
+    "The draftDescription should be something the user can save as the outcome description and later use for planning.\n",
+    "The draftDescription should be more than a slogan. It should read like a practical goal brief.\n",
+    "Use short labeled sections in the draftDescription when helpful.\n",
     "Return valid JSON only."
   )
   .to_string()
@@ -389,6 +485,55 @@ fn build_monthly_user_prompt(request: &MonthlyWizardRequest) -> Result<String, S
   Ok(sections.join("\n\n"))
 }
 
+fn build_outcome_coach_prompt(request: &OutcomeCoachRequest) -> String {
+  let transcript = request
+    .messages
+    .iter()
+    .map(|message| {
+      let speaker = if message.role.trim() == "assistant" { "Assistant" } else { "User" };
+      format!("{speaker}: {}", message.content.trim())
+    })
+    .collect::<Vec<_>>()
+    .join("\n\n");
+
+  let mut sections = vec![
+    "Outcome".to_string(),
+    format!("Title: {}", request.outcome.title.trim()),
+    format!(
+      "Date range: {} - {}",
+      request.outcome.start_date.trim(),
+      request.outcome.end_date.trim()
+    ),
+    format!(
+      "Active days: {}",
+      request
+        .outcome
+        .days_of_week
+        .iter()
+        .map(|day| day.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+    ),
+  ];
+
+  if !request.outcome.notes.trim().is_empty() {
+    sections.push(format!("Saved description:\n{}", request.outcome.notes.trim()));
+  }
+
+  if let Some(current_draft) = request.current_draft.as_deref() {
+    if !current_draft.trim().is_empty() {
+      sections.push(format!("Current working draft:\n{}", current_draft.trim()));
+    }
+  }
+
+  sections.push("Interpretation notes".to_string());
+  sections.push("User replies may be short fragments that modify the previous point.".to_string());
+  sections.push("Prefer a reasonable interpretation over a pedantic clarification when the user's direction is clear.".to_string());
+  sections.push("Conversation".to_string());
+  sections.push(transcript);
+  sections.join("\n\n")
+}
+
 fn extract_json_block(content: &str) -> Result<String, String> {
   let trimmed = content.trim();
   if serde_json::from_str::<Value>(trimmed).is_ok() {
@@ -442,6 +587,19 @@ fn start_warmup_if_needed(model: &str) -> bool {
   true
 }
 
+fn mark_coach_request_canceled(request_id: &str) {
+  if let Ok(mut canceled) = canceled_coach_requests().lock() {
+    canceled.insert(request_id.to_string());
+  }
+}
+
+fn take_canceled_coach_request(request_id: &str) -> bool {
+  canceled_coach_requests()
+    .lock()
+    .map(|mut canceled| canceled.remove(request_id))
+    .unwrap_or(false)
+}
+
 fn ollama_installed() -> bool {
   Command::new("ollama")
     .arg("--version")
@@ -453,7 +611,14 @@ fn ollama_installed() -> bool {
     .unwrap_or(false)
 }
 
-fn call_ollama_chat(model: &str, system_prompt: String, user_prompt: String, schema: Value, temperature: f32) -> Result<(String, String), String> {
+fn call_ollama_chat(
+  model: &str,
+  system_prompt: String,
+  user_prompt: String,
+  schema: Value,
+  temperature: f32,
+  cancel_request_id: Option<&str>,
+) -> Result<(String, String), String> {
   let request = OllamaChatRequest {
     model,
     stream: false,
@@ -478,7 +643,13 @@ fn call_ollama_chat(model: &str, system_prompt: String, user_prompt: String, sch
   let mut last_error = String::new();
 
   for attempt in 0..10 {
-    match post_ollama_json(&body) {
+    if let Some(request_id) = cancel_request_id {
+      if take_canceled_coach_request(request_id) {
+        return Err("Stopped.".to_string());
+      }
+    }
+
+    match post_ollama_json(&body, cancel_request_id) {
       Ok(raw) => {
         let parsed: OllamaChatResponse =
           serde_json::from_str(&raw).map_err(|err| format!("Could not parse Ollama response: {err}"))?;
@@ -498,7 +669,7 @@ fn call_ollama_chat(model: &str, system_prompt: String, user_prompt: String, sch
   Err(format!("Could not reach the local Ollama API after repeated retries. {last_error}"))
 }
 
-fn post_ollama_json(body: &str) -> Result<String, String> {
+fn post_ollama_json(body: &str, cancel_request_id: Option<&str>) -> Result<String, String> {
   let url = ollama_api_chat_url();
   let mut child = Command::new("curl")
     .args([
@@ -524,6 +695,22 @@ fn post_ollama_json(body: &str) -> Result<String, String> {
     stdin
       .write_all(body.as_bytes())
       .map_err(|err| format!("Could not send the Ollama request body: {err}"))?;
+  }
+
+  loop {
+    if let Some(request_id) = cancel_request_id {
+      if take_canceled_coach_request(request_id) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err("Stopped.".to_string());
+      }
+    }
+
+    match child.try_wait() {
+      Ok(Some(_)) => break,
+      Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+      Err(err) => return Err(format!("Could not wait for the Ollama response: {err}")),
+    }
   }
 
   let output = child
@@ -765,7 +952,7 @@ fn wizard_monthly_plan(app: tauri::AppHandle, request: MonthlyWizardRequest) -> 
 
   let model = configured_model(&request.model)?;
   let user_prompt = build_monthly_user_prompt(&request)?;
-  let (model, raw_payload) = call_ollama_chat(model, monthly_plan_system_prompt(), user_prompt, monthly_plan_schema(), 0.2)?;
+  let (model, raw_payload) = call_ollama_chat(model, monthly_plan_system_prompt(), user_prompt, monthly_plan_schema(), 0.2, None)?;
   let payload: MonthlyWizardPayload =
     serde_json::from_str(&raw_payload).map_err(|err| format!("Could not parse the monthly planning payload: {err}"))?;
   let summary = payload.summary.trim().to_string();
@@ -853,7 +1040,7 @@ fn wizard_questions(request: WizardPromptRequest) -> Result<WizardQuestionRespon
 
   let model = configured_model(&request.model)?;
   let user_prompt = build_user_prompt(&request)?;
-  let (model, raw_payload) = call_ollama_chat(model, question_system_prompt(&request.mode)?, user_prompt, question_schema(), 0.2)?;
+  let (model, raw_payload) = call_ollama_chat(model, question_system_prompt(&request.mode)?, user_prompt, question_schema(), 0.2, None)?;
   let payload: WizardQuestionPayload =
     serde_json::from_str(&raw_payload).map_err(|err| format!("Could not parse the question payload: {err}"))?;
   let payload = normalize_questions(payload, &request.mode)?;
@@ -873,7 +1060,7 @@ fn wizard_plan(request: WizardPromptRequest) -> Result<WizardPlanResponse, Strin
 
   let model = configured_model(&request.model)?;
   let user_prompt = build_user_prompt(&request)?;
-  let (model, raw_payload) = call_ollama_chat(model, plan_system_prompt(&request.mode)?, user_prompt, plan_schema(), 0.35)?;
+  let (model, raw_payload) = call_ollama_chat(model, plan_system_prompt(&request.mode)?, user_prompt, plan_schema(), 0.35, None)?;
   let payload: WizardPlanPayload =
     serde_json::from_str(&raw_payload).map_err(|err| format!("Could not parse the planning payload: {err}"))?;
   let payload = normalize_plan_items(payload, &request);
@@ -894,6 +1081,53 @@ fn wizard_plan(request: WizardPromptRequest) -> Result<WizardPlanResponse, Strin
   })
 }
 
+#[tauri::command]
+fn coach_outcome_chat(request: OutcomeCoachRequest) -> Result<OutcomeCoachResponse, String> {
+  if request.messages.is_empty() {
+    return Err("There is no conversation history for this coach turn.".to_string());
+  }
+
+  let model = configured_model(&request.model)?;
+  let user_prompt = build_outcome_coach_prompt(&request);
+  let (model, raw_payload) = call_ollama_chat(
+    model,
+    outcome_coach_system_prompt(),
+    user_prompt,
+    outcome_coach_schema(),
+    0.35,
+    Some(request.request_id.as_str()),
+  )?;
+  let payload: OutcomeCoachPayload =
+    serde_json::from_str(&raw_payload).map_err(|err| format!("Could not parse the coach payload: {err}"))?;
+
+  let reply = payload.reply.trim().to_string();
+  if reply.is_empty() {
+    return Err("The model responded, but it did not return a usable reply.".to_string());
+  }
+
+  let draft_description = payload.draft_description.trim().to_string();
+  if draft_description.is_empty() {
+    return Err("The model responded, but it did not return a usable outcome description.".to_string());
+  }
+
+  Ok(OutcomeCoachResponse {
+    model,
+    reply,
+    draft_description,
+  })
+}
+
+#[tauri::command]
+fn cancel_coach_outcome_chat(request_id: String) -> Result<String, String> {
+  let trimmed = request_id.trim();
+  if trimmed.is_empty() {
+    return Err("The coach request id cannot be empty.".to_string());
+  }
+
+  mark_coach_request_canceled(trimmed);
+  Ok("stopping".to_string())
+}
+
 fn main() {
   tauri::Builder::default()
     .invoke_handler(tauri::generate_handler![
@@ -902,7 +1136,9 @@ fn main() {
       wizard_monthly_plan,
       append_wizard_log,
       wizard_questions,
-      wizard_plan
+      wizard_plan,
+      coach_outcome_chat,
+      cancel_coach_outcome_chat
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

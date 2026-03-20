@@ -11,6 +11,7 @@ type Props = {
 
 export const TAB_META: Record<TabKey, { label: string; hint: string }> = {
   overview: { label: "Overview", hint: "today and progress" },
+  coach: { label: "Coach", hint: "shape the description" },
   plan: { label: "Plan", hint: "month to day" },
   wizard: { label: "Studio", hint: "monthly momentum" },
   calendar: { label: "Calendar", hint: "whole-range check-ins" },

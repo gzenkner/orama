@@ -1,5 +1,5 @@
 import React from "react";
-import type { AppTab, DailyGoal, MonthlyGoal, Outcome, PersistedStateV1, WeekStartsOn, WeeklyGoal } from "./types";
+import type { AppTab, DailyGoal, MonthlyGoal, Outcome, OutcomeCoachThread, PersistedStateV1, WeekStartsOn, WeeklyGoal } from "./types";
 import { normalizeDaysOfWeek } from "./date";
 import { nextOutcomeThemeId, normalizeOutcomeTheme } from "./theme";
 
@@ -36,7 +36,8 @@ function defaultState(): State {
     outcomes: [],
     monthly: {},
     weekly: {},
-    daily: {}
+    daily: {},
+    coachThreads: {}
   };
 }
 
@@ -83,7 +84,11 @@ function readState(): State {
               themeId: normalizeOutcomeTheme((outcome as Partial<Outcome>).themeId, index)
             })
           )
-        : []
+        : [],
+      coachThreads:
+        parsed && parsed.coachThreads && typeof parsed.coachThreads === "object" && !Array.isArray(parsed.coachThreads)
+          ? parsed.coachThreads
+          : {}
     };
   } catch {
     return defaultState();
@@ -196,8 +201,10 @@ export const actions = {
       for (const [k, v] of Object.entries(prev.weekly)) if (!k.startsWith(prefix)) weekly[k] = v;
       const daily: Record<string, DailyGoal> = {};
       for (const [k, v] of Object.entries(prev.daily)) if (!k.startsWith(prefix)) daily[k] = v;
+      const coachThreads: Record<string, OutcomeCoachThread> = {};
+      for (const [k, v] of Object.entries(prev.coachThreads)) if (k !== id) coachThreads[k] = v;
 
-      return { ...prev, outcomes, selectedOutcomeId, monthly, weekly, daily };
+      return { ...prev, outcomes, selectedOutcomeId, monthly, weekly, daily, coachThreads };
     });
   },
   setMonthlyTitle: (outcomeId: string, monthKey: string, title: string) => {
@@ -300,6 +307,22 @@ export const actions = {
       };
     });
   },
+  setOutcomeCoachThread: (outcomeId: string, thread: OutcomeCoachThread) => {
+    store.set((prev) => ({
+      ...prev,
+      coachThreads: {
+        ...prev.coachThreads,
+        [outcomeId]: thread
+      }
+    }));
+  },
+  resetOutcomeCoachThread: (outcomeId: string) => {
+    store.set((prev) => {
+      const coachThreads = { ...prev.coachThreads };
+      delete coachThreads[outcomeId];
+      return { ...prev, coachThreads };
+    });
+  },
   exportJSON: (): string => JSON.stringify(store.get(), null, 2),
   importJSON: (raw: string) => {
     const parsed = JSON.parse(raw) as State;
@@ -323,7 +346,11 @@ export const actions = {
               themeId: normalizeOutcomeTheme((outcome as Partial<Outcome>).themeId, index)
             })
           )
-        : []
+        : [],
+      coachThreads:
+        parsed && parsed.coachThreads && typeof parsed.coachThreads === "object" && !Array.isArray(parsed.coachThreads)
+          ? parsed.coachThreads
+          : {}
     }));
   },
   resetAll: () => {

@@ -331,6 +331,28 @@
     opacity: 1;
   }
 
+  .app-nav-coach {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .app-nav-coach::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(circle at top right, var(--outcome-glow-strong), transparent 52%),
+      linear-gradient(135deg, transparent 0 38%, var(--outcome-glow) 38% 52%, transparent 52% 100%);
+    opacity: 0.92;
+    transition: opacity 160ms ease;
+  }
+
+  .app-nav-coach:hover::before {
+    opacity: 1;
+  }
+
   .app-nav-studio-badge {
     display: inline-flex;
     align-items: center;
@@ -370,6 +392,94 @@
     font-weight: 600;
     letter-spacing: 0.04em;
     line-height: 1.15;
+  }
+
+  .app-chat-thread {
+    background: var(--app-card);
+  }
+
+  .app-chat-bubble {
+    border-radius: 1rem;
+  }
+
+  .app-chat-bubble-assistant {
+    border: 1px solid var(--app-border);
+    background: var(--app-elevated);
+    color: var(--app-text);
+    box-shadow: 0 8px 20px var(--app-shadow);
+  }
+
+  .app-chat-bubble-user {
+    border: 1px solid var(--outcome-border);
+    background: var(--outcome-soft);
+    color: var(--outcome-ink);
+    box-shadow: 0 8px 20px var(--outcome-glow);
+  }
+
+  .app-shell[data-app-theme="black"] .app-chat-bubble-assistant {
+    background: var(--app-elevated);
+  }
+
+  .app-shell[data-app-theme="black"] .app-chat-bubble-user {
+    background: color-mix(in srgb, var(--outcome-soft) 24%, #171211 76%);
+    color: var(--app-text);
+  }
+
+  .app-chat-map-item {
+    width: 100%;
+    border: 1px solid var(--app-border);
+    border-radius: 0.85rem;
+    background: var(--app-elevated);
+    padding: 0.9rem;
+    transition:
+      transform 140ms ease,
+      border-color 160ms ease,
+      background 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  .app-chat-map-item:hover {
+    transform: translateY(-1px);
+    background: var(--app-nav-hover);
+  }
+
+  .app-chat-map-item[data-active="true"] {
+    border-color: var(--outcome-border);
+    background: var(--outcome-soft);
+    box-shadow: inset 0 0 0 1px var(--outcome-glow);
+  }
+
+  .app-chat-map-item[data-complete="true"] .app-chat-map-index {
+    border-color: var(--outcome-border);
+    background: var(--outcome-soft);
+    color: var(--outcome-ink);
+  }
+
+  .app-chat-map-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    flex-shrink: 0;
+    border: 1px solid var(--app-border);
+    border-radius: 999px;
+    background: var(--app-card);
+    color: var(--app-subtle);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .app-chat-draft {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 34%),
+      color-mix(in srgb, var(--app-card) 74%, var(--outcome-soft) 26%);
+  }
+
+  .app-shell[data-app-theme="black"] .app-chat-draft {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 30%),
+      color-mix(in srgb, var(--app-card) 76%, var(--outcome-soft) 24%);
   }
 
   .app-progress-track {

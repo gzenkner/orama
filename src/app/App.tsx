@@ -19,6 +19,7 @@ import Modal from "./ui/Modal";
 import { TAB_META } from "./ui/Tabs";
 import Textarea from "./ui/Textarea";
 import OverviewView from "./views/OverviewView";
+import CoachView from "./views/CoachView";
 import PlanView, { TimelineYardstick, usePlanNavigation } from "./views/PlanView";
 import WizardView from "./views/WizardView";
 import CalendarView from "./views/CalendarView";
@@ -148,6 +149,7 @@ function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
       {keys.map((key) => {
         const active = activeTab === key;
         const isStudio = key === "wizard";
+        const isCoach = key === "coach";
         return (
           <button
             key={key}
@@ -155,6 +157,7 @@ function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
             className={cn(
               "rounded-[0.7rem] border px-4 py-3 text-left transition",
               isStudio && "app-nav-studio",
+              isCoach && "app-nav-coach",
               active
                 ? "app-nav-active"
                 : "border-[color:var(--app-border)] bg-[color:var(--app-elevated)] hover:bg-[color:var(--app-nav-hover)]"
@@ -167,6 +170,7 @@ function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-semibold">{TAB_META[key].label}</div>
               {isStudio ? <span className="app-nav-studio-badge">AI</span> : null}
+              {isCoach ? <span className="app-nav-studio-badge">Chat</span> : null}
             </div>
             <div className="mt-1 text-xs app-muted">{TAB_META[key].hint}</div>
           </button>
@@ -548,83 +552,86 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
-      <div className="border-b border-[color:var(--app-border)] p-4 sm:p-6">
-        <div className="app-card-soft rounded-[0.95rem] p-3 sm:p-4">
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <OutcomeBadge outcome={outcome} />
-                <span className="app-pill rounded-[0.55rem] px-3 py-1 text-xs font-semibold">
-                  {months.length} month{months.length === 1 ? "" : "s"}
-                </span>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant={headerExpanded ? "secondary" : "ghost"}
-                  size="sm"
-                  disabled={!hasNotes}
-                  title={hasNotes ? "Show or hide outcome details" : "No outcome details"}
-                  onClick={() => setHeaderExpanded((prev) => !prev)}
-                >
-                  Details
-                </Button>
-                <Button
-                  variant={yardstickExpanded ? "secondary" : "ghost"}
-                  size="sm"
-                  title="Show or hide the timeline yardstick"
-                  onClick={() => setYardstickExpanded((prev) => !prev)}
-                >
-                  Yardstick
-                </Button>
-                <Button variant="ghost" size="sm" title="Edit outcome" onClick={() => setEditOpen(true)}>
-                  Edit
-                </Button>
-              </div>
-            </div>
-
-            <div className="min-w-0">
-              <div className="font-display text-[1.05rem] font-semibold leading-tight sm:text-[1.22rem]">{outcome.title}</div>
-              <div className="mt-1.5 text-sm app-muted">
-                {formatShortDate(outcome.startDate)} - {formatShortDate(outcome.endDate)} • {formatDaysOfWeek(outcome.daysOfWeek)}
-              </div>
-            </div>
-
-            {headerExpanded && hasNotes ? (
-              <div className="max-w-3xl rounded-[0.7rem] border border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] p-4 text-[color:var(--outcome-ink)]">
-                <div
-                  className="text-[11px] font-semibold uppercase tracking-[0.14em]"
-                  style={{ color: "var(--outcome-ink)", opacity: 0.72 }}
-                >
-                  Outcome description
+      {tab !== "coach" ? (
+        <div className="border-b border-[color:var(--app-border)] p-4 sm:p-6">
+          <div className="app-card-soft rounded-[0.95rem] p-3 sm:p-4">
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <OutcomeBadge outcome={outcome} />
+                  <span className="app-pill rounded-[0.55rem] px-3 py-1 text-xs font-semibold">
+                    {months.length} month{months.length === 1 ? "" : "s"}
+                  </span>
                 </div>
-                <div className="mt-2 whitespace-pre-wrap text-sm leading-6">{outcome.notes}</div>
-              </div>
-            ) : null}
 
-            {yardstickExpanded ? (
-              <div className="pt-1">
-                <TimelineYardstick
-                  outcome={outcome}
-                  monthKeys={planNavigation.monthKeys}
-                  weekStartsOn={weekStartsOn}
-                  expandedMonths={planNavigation.expandedMonths}
-                  expandedWeekKeys={planNavigation.expandedWeekKeys}
-                  monthly={monthly}
-                  weekly={weekly}
-                  daily={daily}
-                  onJumpMonth={(monthKey) => runPlanJump(() => planNavigation.goToMonth(monthKey))}
-                  onJumpWeek={(monthKey, weekStartISO) => runPlanJump(() => planNavigation.goToWeek(monthKey, weekStartISO))}
-                  onJumpDay={(monthKey, weekStartISO, dateISO) => runPlanJump(() => planNavigation.goToDay(monthKey, weekStartISO, dateISO))}
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant={headerExpanded ? "secondary" : "ghost"}
+                    size="sm"
+                    disabled={!hasNotes}
+                    title={hasNotes ? "Show or hide outcome details" : "No outcome details"}
+                    onClick={() => setHeaderExpanded((prev) => !prev)}
+                  >
+                    Details
+                  </Button>
+                  <Button
+                    variant={yardstickExpanded ? "secondary" : "ghost"}
+                    size="sm"
+                    title="Show or hide the timeline yardstick"
+                    onClick={() => setYardstickExpanded((prev) => !prev)}
+                  >
+                    Yardstick
+                  </Button>
+                  <Button variant="ghost" size="sm" title="Edit outcome" onClick={() => setEditOpen(true)}>
+                    Edit
+                  </Button>
+                </div>
               </div>
-            ) : null}
+
+              <div className="min-w-0">
+                <div className="font-display text-[1.05rem] font-semibold leading-tight sm:text-[1.22rem]">{outcome.title}</div>
+                <div className="mt-1.5 text-sm app-muted">
+                  {formatShortDate(outcome.startDate)} - {formatShortDate(outcome.endDate)} • {formatDaysOfWeek(outcome.daysOfWeek)}
+                </div>
+              </div>
+
+              {headerExpanded && hasNotes ? (
+                <div className="max-w-3xl rounded-[0.7rem] border border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] p-4 text-[color:var(--outcome-ink)]">
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-[0.14em]"
+                    style={{ color: "var(--outcome-ink)", opacity: 0.72 }}
+                  >
+                    Outcome description
+                  </div>
+                  <div className="mt-2 whitespace-pre-wrap text-sm leading-6">{outcome.notes}</div>
+                </div>
+              ) : null}
+
+              {yardstickExpanded ? (
+                <div className="pt-1">
+                  <TimelineYardstick
+                    outcome={outcome}
+                    monthKeys={planNavigation.monthKeys}
+                    weekStartsOn={weekStartsOn}
+                    expandedMonths={planNavigation.expandedMonths}
+                    expandedWeekKeys={planNavigation.expandedWeekKeys}
+                    monthly={monthly}
+                    weekly={weekly}
+                    daily={daily}
+                    onJumpMonth={(monthKey) => runPlanJump(() => planNavigation.goToMonth(monthKey))}
+                    onJumpWeek={(monthKey, weekStartISO) => runPlanJump(() => planNavigation.goToWeek(monthKey, weekStartISO))}
+                    onJumpDay={(monthKey, weekStartISO, dateISO) => runPlanJump(() => planNavigation.goToDay(monthKey, weekStartISO, dateISO))}
+                  />
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
+      <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-auto", tab === "coach" ? "" : "p-4 sm:p-6")}>
         {tab === "overview" ? <OverviewView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
+        {tab === "coach" ? <CoachView outcome={outcome} /> : null}
         {tab === "plan" ? <PlanView outcome={outcome} weekStartsOn={weekStartsOn} navigation={planNavigation} /> : null}
         {tab === "wizard" ? <WizardView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
         {tab === "calendar" ? <CalendarView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
