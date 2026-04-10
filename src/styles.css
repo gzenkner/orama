@@ -309,66 +309,64 @@
     color: var(--app-text);
   }
 
-  .app-nav-studio {
-    position: relative;
-    overflow: hidden;
-    isolation: isolate;
+  .app-workspace-button {
+    width: 100%;
+    border: 1px solid var(--app-border);
+    border-radius: 0.78rem;
+    background: color-mix(in srgb, var(--app-elevated) 78%, var(--app-card) 22%);
+    color: var(--app-text);
+    text-align: left;
+    padding: 0.72rem 0.82rem;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.04);
+    transition:
+      transform 140ms ease,
+      background 160ms ease,
+      border-color 160ms ease,
+      box-shadow 160ms ease;
   }
 
-  .app-nav-studio::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    background:
-      linear-gradient(135deg, transparent 0 52%, var(--outcome-glow) 52% 68%, transparent 68% 100%),
-      linear-gradient(90deg, var(--outcome-glow), transparent 38%);
-    opacity: 0.95;
-    transition: opacity 160ms ease;
+  .app-workspace-button:hover {
+    transform: translateY(-1px);
+    background: var(--app-nav-hover);
+    border-color: color-mix(in srgb, var(--app-border) 72%, var(--outcome-border) 28%);
+    box-shadow: 0 12px 24px var(--app-shadow);
   }
 
-  .app-nav-studio:hover::before {
-    opacity: 1;
+  .app-workspace-button-active {
+    border-color: var(--outcome-border);
+    background: linear-gradient(180deg, var(--outcome-soft) 0%, color-mix(in srgb, var(--outcome-soft) 72%, var(--app-card) 28%) 100%);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--outcome-accent) 34%, transparent),
+      0 14px 30px var(--outcome-glow);
   }
 
-  .app-nav-coach {
-    position: relative;
-    overflow: hidden;
-    isolation: isolate;
-  }
-
-  .app-nav-coach::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    background:
-      radial-gradient(circle at top right, var(--outcome-glow-strong), transparent 52%),
-      linear-gradient(135deg, transparent 0 38%, var(--outcome-glow) 38% 52%, transparent 52% 100%);
-    opacity: 0.92;
-    transition: opacity 160ms ease;
-  }
-
-  .app-nav-coach:hover::before {
-    opacity: 1;
-  }
-
-  .app-nav-studio-badge {
+  .app-workspace-badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 2rem;
-    padding: 0.18rem 0.52rem;
-    border: 1px solid var(--outcome-border);
+    min-width: 1.9rem;
+    padding: 0.16rem 0.46rem;
+    border: 1px solid var(--app-border);
     border-radius: 999px;
-    background: var(--outcome-soft);
-    color: var(--outcome-ink);
-    box-shadow: 0 8px 18px var(--outcome-glow);
-    font-size: 0.64rem;
+    background: color-mix(in srgb, var(--app-card) 76%, var(--app-elevated) 24%);
+    color: var(--app-subtle);
+    font-size: 0.58rem;
     font-weight: 800;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.14em;
     line-height: 1;
     text-transform: uppercase;
+  }
+
+  .app-workspace-badge-ai {
+    border-color: color-mix(in srgb, var(--outcome-border) 72%, var(--app-border) 28%);
+    background: color-mix(in srgb, var(--outcome-soft) 86%, var(--app-card) 14%);
+    color: var(--outcome-ink);
+  }
+
+  .app-workspace-badge-chat {
+    border-color: color-mix(in srgb, var(--app-border) 64%, var(--outcome-border) 36%);
+    background: color-mix(in srgb, var(--app-elevated) 64%, var(--outcome-soft) 36%);
+    color: color-mix(in srgb, var(--app-text) 72%, var(--outcome-ink) 28%);
   }
 
   .app-finder-tab {

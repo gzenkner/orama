@@ -16,16 +16,17 @@ import Button from "./ui/Button";
 import Card from "./ui/Card";
 import Input from "./ui/Input";
 import Modal from "./ui/Modal";
+import OramaLogo from "./ui/OramaLogo";
 import { TAB_META } from "./ui/Tabs";
 import Textarea from "./ui/Textarea";
 import OverviewView from "./views/OverviewView";
+import OverviewLandingView from "./views/OverviewLandingView";
 import CoachView from "./views/CoachView";
 import PlanView, { TimelineYardstick, usePlanNavigation } from "./views/PlanView";
 import WizardView from "./views/WizardView";
 import CalendarView from "./views/CalendarView";
 import BackupView from "./views/BackupView";
 import { cn } from "./ui/cn";
-import oramaLogo from "../../orama_logo.png";
 
 function firstOutcomeId(outcomes: Outcome[]): string | undefined {
   return outcomes[0]?.id;
@@ -146,36 +147,40 @@ function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
   return (
     <div className="grid gap-2">
       <div className="app-kicker">Workspace</div>
-      {keys.map((key) => {
-        const active = activeTab === key;
-        const isStudio = key === "wizard";
-        const isCoach = key === "coach";
-        return (
-          <button
-            key={key}
-            type="button"
-            className={cn(
-              "rounded-[0.7rem] border px-4 py-3 text-left transition",
-              isStudio && "app-nav-studio",
-              isCoach && "app-nav-coach",
-              active
-                ? "app-nav-active"
-                : "border-[color:var(--app-border)] bg-[color:var(--app-elevated)] hover:bg-[color:var(--app-nav-hover)]"
-            )}
-            onClick={() => {
-              actions.setActiveTab(key);
-              onSelect?.();
-            }}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold">{TAB_META[key].label}</div>
-              {isStudio ? <span className="app-nav-studio-badge">AI</span> : null}
-              {isCoach ? <span className="app-nav-studio-badge">Chat</span> : null}
-            </div>
-            <div className="mt-1 text-xs app-muted">{TAB_META[key].hint}</div>
-          </button>
-        );
-      })}
+      <div className="max-h-[21rem] overflow-y-auto pr-1">
+        <div className="grid gap-2">
+          {keys.map((key) => {
+            const active = activeTab === key;
+            const isStudio = key === "wizard";
+            const isCoach = key === "coach";
+            return (
+              <button
+                key={key}
+                type="button"
+                className={cn(
+                  "w-full rounded-[0.65rem] border px-3 py-3 text-left transition",
+                  active
+                    ? "app-nav-active"
+                    : "border-[color:var(--app-border)] bg-[color:var(--app-card)] hover:bg-[color:var(--app-nav-hover)]"
+                )}
+                title={TAB_META[key].hint}
+                onClick={() => {
+                  if (key === "overview") actions.openOverview("global");
+                  else actions.setActiveTab(key);
+                  onSelect?.();
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-3.5 w-3.5 shrink-0 rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-elevated)]" />
+                  <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">{TAB_META[key].label}</div>
+                  {isStudio ? <span className="app-workspace-badge app-workspace-badge-ai">AI</span> : null}
+                  {isCoach ? <span className="app-workspace-badge app-workspace-badge-chat">Chat</span> : null}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -183,10 +188,41 @@ function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
 function OutcomeList({ onSelect }: { onSelect?: () => void }) {
   const outcomes = useAppState((s) => s.outcomes);
   const selectedOutcomeId = useAppState((s) => s.selectedOutcomeId);
+  const [draggedOutcomeId, setDraggedOutcomeId] = React.useState<string | null>(null);
+  const [dropTarget, setDropTarget] = React.useState<{ id: string; position: "before" | "after" } | null>(null);
 
   React.useEffect(() => {
     if (!selectedOutcomeId && outcomes.length) actions.selectOutcome(firstOutcomeId(outcomes)!);
   }, [outcomes, selectedOutcomeId]);
+
+  function clearDragState() {
+    setDraggedOutcomeId(null);
+    setDropTarget(null);
+  }
+
+  function updateDropTarget(e: React.DragEvent<HTMLDivElement>, targetId: string) {
+    if (!draggedOutcomeId || draggedOutcomeId === targetId) {
+      setDropTarget(null);
+      return;
+    }
+
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+
+    const bounds = e.currentTarget.getBoundingClientRect();
+    const position = e.clientY < bounds.top + bounds.height / 2 ? "before" : "after";
+    setDropTarget((prev) => (prev?.id === targetId && prev.position === position ? prev : { id: targetId, position }));
+  }
+
+  function dropOnOutcome(targetId: string) {
+    if (!draggedOutcomeId || draggedOutcomeId === targetId || !dropTarget) {
+      clearDragState();
+      return;
+    }
+
+    actions.moveOutcome(draggedOutcomeId, targetId, dropTarget.position);
+    clearDragState();
+  }
 
   if (!outcomes.length) {
     return (
@@ -197,61 +233,118 @@ function OutcomeList({ onSelect }: { onSelect?: () => void }) {
   }
 
   return (
-    <div className="grid gap-2">
-      {outcomes.map((outcome) => {
-        const active = outcome.id === selectedOutcomeId;
-        const theme = getOutcomeTheme(outcome.themeId);
+    <div className="max-h-[14rem] overflow-y-auto pr-1">
+      <div className="grid gap-2">
+        {outcomes.map((outcome) => {
+          const active = outcome.id === selectedOutcomeId;
+          const theme = getOutcomeTheme(outcome.themeId);
+          const showDropBefore = dropTarget?.id === outcome.id && dropTarget.position === "before";
+          const showDropAfter = dropTarget?.id === outcome.id && dropTarget.position === "after";
 
-        return (
-          <button
-            key={outcome.id}
-            type="button"
-            className={cn(
-              "rounded-[0.65rem] border px-3 py-3 text-left transition",
-              active
-                ? "app-nav-active"
-                : "border-[color:var(--app-border)] bg-[color:var(--app-card)] hover:bg-[color:var(--app-nav-hover)]"
-            )}
-            onClick={() => {
-              actions.selectOutcome(outcome.id);
-              onSelect?.();
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <span
-                className="inline-flex h-3.5 w-3.5 shrink-0 rounded-full border"
-                style={{ borderColor: theme.border, background: theme.accent }}
-              />
-              <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">{outcome.title}</div>
+          return (
+            <div
+              key={outcome.id}
+              className={cn(
+                "rounded-[0.75rem] transition",
+                showDropBefore && "border-t-2 border-[color:var(--app-text)] pt-1.5",
+                showDropAfter && "border-b-2 border-[color:var(--app-text)] pb-1.5"
+              )}
+              onDragOver={(e) => updateDropTarget(e, outcome.id)}
+              onDrop={(e) => {
+                e.preventDefault();
+                dropOnOutcome(outcome.id);
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null) && dropTarget?.id === outcome.id) {
+                  setDropTarget(null);
+                }
+              }}
+            >
+              <button
+                type="button"
+                draggable
+                className={cn(
+                  "w-full rounded-[0.65rem] border px-3 py-3 text-left transition",
+                  draggedOutcomeId === outcome.id && "opacity-55",
+                  active
+                    ? "app-nav-active"
+                    : "border-[color:var(--app-border)] bg-[color:var(--app-card)] hover:bg-[color:var(--app-nav-hover)]"
+                )}
+                onDragStart={(e) => {
+                  setDraggedOutcomeId(outcome.id);
+                  setDropTarget(null);
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", outcome.id);
+                }}
+                onDragEnd={clearDragState}
+                onClick={() => {
+                  actions.openOverview("outcome", outcome.id);
+                  onSelect?.();
+                }}
+                title="Drag to reorder outcomes"
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    className="inline-flex h-3.5 w-3.5 shrink-0 rounded-full border"
+                    style={{ borderColor: theme.border, background: theme.accent }}
+                  />
+                  <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">{outcome.title}</div>
+                  <div className="shrink-0 text-[8px] uppercase tracking-[0.18em] app-muted">Drag</div>
+                </div>
+              </button>
             </div>
-          </button>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function Sidebar({ onNewOutcome }: { onNewOutcome: () => void }) {
+function Sidebar({ onNewOutcome, onHide }: { onNewOutcome: () => void; onHide: () => void }) {
   return (
-    <aside className="app-panel flex h-full min-h-0 w-full flex-col rounded-[0.95rem] p-5">
-      <div className="rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] p-3">
-        <div className="flex items-center justify-between gap-3">
-          <img src={oramaLogo} alt="Orama" className="h-8 w-auto" />
-          <Button variant="secondary" size="sm" title="Create a new outcome" onClick={onNewOutcome}>
-            Create new
-          </Button>
-        </div>
+    <aside className="app-panel relative flex h-full min-h-0 w-full flex-col rounded-[0.95rem] p-5">
+      <Button
+        variant="ghost"
+        size="sm"
+        title="Collapse sidebar"
+        aria-label="Collapse sidebar"
+        onClick={onHide}
+        className="absolute right-5 top-5 w-9 justify-center border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-0 hover:bg-[color:var(--app-card)]"
+      >
+        {"<"}
+      </Button>
+
+      <div className="grid gap-3 pr-16">
+        <button
+          type="button"
+          className="justify-self-start rounded-[0.55rem] transition hover:opacity-85"
+          title="Open overall progress"
+          onClick={() => actions.openOverview("global")}
+        >
+          <OramaLogo />
+        </button>
       </div>
 
       <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="min-h-0 flex-1 overflow-auto pl-4 pr-1">
-          <div className="app-kicker">Outcomes</div>
-          <div className="mt-3 grid gap-2">
+        <div className="pl-4 pr-1">
+          <div className="flex items-center justify-between gap-3">
+            <div className="app-kicker">Outcomes</div>
+            <button
+              type="button"
+              title="Create new outcome"
+              aria-label="Create new outcome"
+              onClick={onNewOutcome}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-[0.65rem] text-2xl font-semibold leading-none text-[color:var(--app-muted)] transition hover:bg-[color:var(--app-nav-hover)] hover:text-[color:var(--app-text)]"
+            >
+              +
+            </button>
+          </div>
+          <div className="mt-3">
             <OutcomeList />
           </div>
         </div>
 
-        <div className="mt-4 shrink-0 border-t border-[color:var(--app-border)] pt-4">
+        <div className="mt-4 min-h-0 shrink-0 border-t border-[color:var(--app-border)] pt-4">
           <WorkspaceNav />
         </div>
       </div>
@@ -464,6 +557,7 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
   const selectedOutcomeId = useAppState((s) => s.selectedOutcomeId);
   const weekStartsOn = useAppState((s) => s.weekStartsOn);
   const tab = useAppState((s) => s.ui.activeTab);
+  const overviewScope = useAppState((s) => s.ui.overviewScope);
   const scrollTopByTab = useAppState((s) => s.ui.scrollTopByTab);
   const monthly = useAppState((s) => s.monthly);
   const weekly = useAppState((s) => s.weekly);
@@ -540,6 +634,7 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
 
   const months = monthKeysInRange(outcome.startDate, outcome.endDate);
   const hasNotes = outcome.notes.trim().length > 0;
+  const showOutcomeHeader = tab === "plan" || tab === "wizard" || tab === "calendar" || (tab === "overview" && overviewScope === "outcome");
 
   function runPlanJump(jump: () => void) {
     if (tab === "plan") {
@@ -552,7 +647,7 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
-      {tab !== "coach" ? (
+      {showOutcomeHeader ? (
         <div className="border-b border-[color:var(--app-border)] p-4 sm:p-6">
           <div className="app-card-soft rounded-[0.95rem] p-3 sm:p-4">
             <div className="flex flex-col gap-3">
@@ -561,6 +656,9 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
                   <OutcomeBadge outcome={outcome} />
                   <span className="app-pill rounded-[0.55rem] px-3 py-1 text-xs font-semibold">
                     {months.length} month{months.length === 1 ? "" : "s"}
+                  </span>
+                  <span className="app-pill rounded-[0.55rem] px-3 py-1 text-xs font-semibold" title="Active days">
+                    {formatDaysOfWeek(outcome.daysOfWeek)}
                   </span>
                 </div>
 
@@ -577,10 +675,10 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
                   <Button
                     variant={yardstickExpanded ? "secondary" : "ghost"}
                     size="sm"
-                    title="Show or hide the timeline yardstick"
+                    title="Show or hide the timeline"
                     onClick={() => setYardstickExpanded((prev) => !prev)}
                   >
-                    Yardstick
+                    Timeline
                   </Button>
                   <Button variant="ghost" size="sm" title="Edit outcome" onClick={() => setEditOpen(true)}>
                     Edit
@@ -589,14 +687,14 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
               </div>
 
               <div className="min-w-0">
-                <div className="font-display text-[1.05rem] font-semibold leading-tight sm:text-[1.22rem]">{outcome.title}</div>
+                <div className="font-display text-[1.55rem] font-semibold leading-tight sm:text-[1.9rem]">{outcome.title}</div>
                 <div className="mt-1.5 text-sm app-muted">
-                  {formatShortDate(outcome.startDate)} - {formatShortDate(outcome.endDate)} • {formatDaysOfWeek(outcome.daysOfWeek)}
+                  {formatShortDate(outcome.startDate)} - {formatShortDate(outcome.endDate)}
                 </div>
               </div>
 
               {headerExpanded && hasNotes ? (
-                <div className="max-w-3xl rounded-[0.7rem] border border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] p-4 text-[color:var(--outcome-ink)]">
+                <div className="w-full rounded-[0.7rem] border border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] p-4 text-[color:var(--outcome-ink)]">
                   <div
                     className="text-[11px] font-semibold uppercase tracking-[0.14em]"
                     style={{ color: "var(--outcome-ink)", opacity: 0.72 }}
@@ -615,9 +713,11 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
                     weekStartsOn={weekStartsOn}
                     expandedMonths={planNavigation.expandedMonths}
                     expandedWeekKeys={planNavigation.expandedWeekKeys}
+                    allExpanded={planNavigation.allExpanded}
                     monthly={monthly}
                     weekly={weekly}
                     daily={daily}
+                    onToggleAll={planNavigation.toggleAll}
                     onJumpMonth={(monthKey) => runPlanJump(() => planNavigation.goToMonth(monthKey))}
                     onJumpWeek={(monthKey, weekStartISO) => runPlanJump(() => planNavigation.goToWeek(monthKey, weekStartISO))}
                     onJumpDay={(monthKey, weekStartISO, dateISO) => runPlanJump(() => planNavigation.goToDay(monthKey, weekStartISO, dateISO))}
@@ -630,7 +730,8 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
       ) : null}
 
       <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-auto", tab === "coach" ? "" : "p-4 sm:p-6")}>
-        {tab === "overview" ? <OverviewView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
+        {tab === "overview" && overviewScope === "global" ? <OverviewLandingView /> : null}
+        {tab === "overview" && overviewScope === "outcome" ? <OverviewView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
         {tab === "coach" ? <CoachView outcome={outcome} /> : null}
         {tab === "plan" ? <PlanView outcome={outcome} weekStartsOn={weekStartsOn} navigation={planNavigation} /> : null}
         {tab === "wizard" ? <WizardView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
@@ -684,6 +785,7 @@ function MobileHeader({ onNewOutcome }: { onNewOutcome: () => void }) {
 
 export default function App() {
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [sidebarHidden, setSidebarHidden] = React.useState(false);
   const outcomes = useAppState((s) => s.outcomes);
   const selectedOutcomeId = useAppState((s) => s.selectedOutcomeId);
   const themeMode = useAppState((s) => s.ui.themeMode);
@@ -693,10 +795,32 @@ export default function App() {
 
   return (
     <div className="app-shell h-dvh w-dvw" data-app-theme={themeMode} style={getOutcomeThemeStyle(themeId)}>
-      <div className="relative grid h-full w-full grid-cols-1 gap-4 p-3 sm:grid-cols-[300px_minmax(0,1fr)] sm:p-4">
-        <div className="hidden min-h-0 sm:block">
-          <Sidebar onNewOutcome={() => setCreateOpen(true)} />
-        </div>
+      <div
+        className={cn(
+          "relative grid h-full w-full grid-cols-1 gap-4 p-3 sm:p-4",
+          sidebarHidden ? "sm:grid-cols-[minmax(0,1fr)]" : "sm:grid-cols-[300px_minmax(0,1fr)]"
+        )}
+      >
+        {sidebarHidden ? (
+          <div className="absolute left-4 top-4 z-20 hidden sm:flex">
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Show sidebar"
+              aria-label="Show sidebar"
+              onClick={() => setSidebarHidden(false)}
+              className="w-9 justify-center border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-0 hover:bg-[color:var(--app-card)]"
+            >
+              {">"}
+            </Button>
+          </div>
+        ) : null}
+
+        {!sidebarHidden ? (
+          <div className="hidden min-h-0 sm:block">
+            <Sidebar onNewOutcome={() => setCreateOpen(true)} onHide={() => setSidebarHidden(true)} />
+          </div>
+        ) : null}
 
         <div className="flex min-h-0 flex-col gap-4">
           <div className="sm:hidden">

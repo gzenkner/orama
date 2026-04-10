@@ -1,5 +1,5 @@
 import React from "react";
-import type { AppTab, DailyGoal, MonthlyGoal, Outcome, OutcomeCoachThread, PersistedStateV1, WeekStartsOn, WeeklyGoal } from "./types";
+import type { AppTab, DailyGoal, MonthlyGoal, Outcome, OutcomeCoachThread, OverviewScope, PersistedStateV1, WeekStartsOn, WeeklyGoal } from "./types";
 import { normalizeDaysOfWeek } from "./date";
 import { nextOutcomeThemeId, normalizeOutcomeTheme } from "./theme";
 
@@ -30,6 +30,7 @@ function defaultState(): State {
       showMonthlyObjectives: false,
       showWeeklyObjectives: false,
       activeTab: "overview",
+      overviewScope: "global",
       themeMode: "white",
       scrollTopByTab: {}
     },
@@ -72,6 +73,7 @@ function readState(): State {
         ...defaultState().ui,
         ...(parsed as Partial<State>).ui,
         activeTab: "overview",
+        overviewScope: (parsed as Partial<State>).ui?.overviewScope ?? "global",
         scrollTopByTab: {
           ...((parsed as Partial<State>).ui?.scrollTopByTab ?? {}),
           overview: 0
@@ -143,6 +145,17 @@ export const actions = {
   setActiveTab: (activeTab: AppTab) => {
     store.set((prev) => ({ ...prev, ui: { ...prev.ui, activeTab } }));
   },
+  openOverview: (scope: OverviewScope, selectedOutcomeId?: string) => {
+    store.set((prev) => ({
+      ...prev,
+      selectedOutcomeId: selectedOutcomeId ?? prev.selectedOutcomeId,
+      ui: {
+        ...prev.ui,
+        activeTab: "overview",
+        overviewScope: scope
+      }
+    }));
+  },
   setScrollTopForTab: (tab: AppTab, scrollTop: number) => {
     store.set((prev) => ({
       ...prev,
@@ -175,6 +188,7 @@ export const actions = {
       ui: {
         ...prev.ui,
         activeTab: "overview",
+        overviewScope: "outcome",
         scrollTopByTab: {
           ...prev.ui.scrollTopByTab,
           overview: 0
@@ -188,6 +202,25 @@ export const actions = {
       ...prev,
       outcomes: prev.outcomes.map((o) => (o.id === id ? normalizeOutcome({ ...o, ...patch }) : o))
     }));
+  },
+  moveOutcome: (draggedId: string, targetId: string, position: "before" | "after") => {
+    store.set((prev) => {
+      if (draggedId === targetId) return prev;
+
+      const outcomes = [...prev.outcomes];
+      const draggedIndex = outcomes.findIndex((outcome) => outcome.id === draggedId);
+      const targetIndex = outcomes.findIndex((outcome) => outcome.id === targetId);
+      if (draggedIndex < 0 || targetIndex < 0) return prev;
+
+      const [draggedOutcome] = outcomes.splice(draggedIndex, 1);
+      const nextTargetIndex = outcomes.findIndex((outcome) => outcome.id === targetId);
+      if (!draggedOutcome || nextTargetIndex < 0) return prev;
+
+      const insertAt = position === "before" ? nextTargetIndex : nextTargetIndex + 1;
+      outcomes.splice(insertAt, 0, draggedOutcome);
+
+      return { ...prev, outcomes };
+    });
   },
   deleteOutcome: (id: string) => {
     store.set((prev) => {
@@ -334,6 +367,7 @@ export const actions = {
         ...defaultState().ui,
         ...(parsed as Partial<State>).ui,
         activeTab: "overview",
+        overviewScope: (parsed as Partial<State>).ui?.overviewScope ?? "global",
         scrollTopByTab: {
           ...((parsed as Partial<State>).ui?.scrollTopByTab ?? {}),
           overview: 0

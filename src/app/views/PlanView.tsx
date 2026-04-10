@@ -85,9 +85,11 @@ function TimelineYardstick({
   weekStartsOn,
   expandedMonths,
   expandedWeekKeys,
+  allExpanded,
   monthly,
   weekly,
   daily,
+  onToggleAll,
   onJumpMonth,
   onJumpWeek,
   onJumpDay
@@ -97,9 +99,11 @@ function TimelineYardstick({
   weekStartsOn: WeekStartsOn;
   expandedMonths: Set<string>;
   expandedWeekKeys: Set<string>;
+  allExpanded: boolean;
   monthly: Record<string, { title: string }>;
   weekly: Record<string, { title: string }>;
   daily: Record<string, DailyGoal>;
+  onToggleAll: () => void;
   onJumpMonth: (monthKey: string) => void;
   onJumpWeek: (monthKey: string, weekStartISO: string) => void;
   onJumpDay: (monthKey: string, weekStartISO: string, dateISO: string) => void;
@@ -109,9 +113,9 @@ function TimelineYardstick({
   const span = Math.max(1, endDay - startDay);
 
   const width = 1000;
-  const height = 148;
+  const height = 136;
   const pad = 18;
-  const y = 82;
+  const y = 76;
 
   const xForDay = (dayNumber: number) => {
     const t = (dayNumber - startDay) / span;
@@ -170,29 +174,34 @@ function TimelineYardstick({
   }
 
   return (
-    <div className="-mx-1 rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-2 py-3 sm:-mx-2 sm:px-3">
+    <div className="rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-2 py-3 sm:px-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <div className="app-kicker">Timeline yardstick</div>
+          <div className="app-kicker">Timeline</div>
           <div className="mt-1 text-xs app-muted">It zooms in as you expand months and weeks.</div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-[11px] app-muted">
-          <div className="flex items-center gap-2">
-            <span className="inline-block h-2 w-2 rounded-full bg-[color:var(--app-border)]" /> Open
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-block h-2 w-2 rounded-full" style={{ background: trafficLightVar("red", "fill") }} /> Missed
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-block h-2 w-2 rounded-full" style={{ background: trafficLightVar("amber", "fill") }} /> Planned
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-block h-2 w-2 rounded-full" style={{ background: trafficLightVar("green", "fill") }} /> Done
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <Button size="sm" variant="ghost" onClick={onToggleAll}>
+            {allExpanded ? "Collapse all" : "Expand all"}
+          </Button>
+          <div className="flex flex-wrap items-center gap-3 text-[11px] app-muted">
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-2 w-2 rounded-full bg-[color:var(--app-border)]" /> Open
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: trafficLightVar("red", "fill") }} /> Missed
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: trafficLightVar("amber", "fill") }} /> Planned
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: trafficLightVar("green", "fill") }} /> Done
+            </div>
           </div>
         </div>
       </div>
 
-      <svg className="mt-3 h-[7.5rem] w-full sm:h-32" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Timeline yardstick">
+      <svg className="mt-3 h-[6.75rem] w-full sm:h-[7.5rem]" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Timeline">
         <line
           x1={pad}
           y1={y}
@@ -261,13 +270,13 @@ function TimelineYardstick({
               ) : null}
 
               {wideEnough ? (
-                <text x={labelX} y={y - 22} textAnchor="middle" fill="var(--app-subtle)" fontSize={12}>
+                <text x={labelX} y={y + 34} textAnchor="middle" fill="var(--app-subtle)" fontSize={12}>
                   {monthLabel(m.monthKey)}
                 </text>
               ) : null}
 
               {m.monthTitle ? (
-                <circle cx={labelX} cy={y - 10} r={4} fill={trafficLightVar("amber", "fill")}>
+                <circle cx={labelX} cy={y + 16} r={4} fill={trafficLightVar("amber", "fill")}>
                   <title>Monthly goal: {m.monthTitle}</title>
                 </circle>
               ) : null}
@@ -396,13 +405,14 @@ export type PlanNavigation = {
   activeMonthKey: string | null;
   expandedMonths: Set<string>;
   expandedWeekKeys: Set<string>;
+  allExpanded: boolean;
   goToMonth: (monthKey: string) => void;
   goToWeek: (monthKey: string, weekStartISO: string) => void;
   goToDay: (monthKey: string, weekStartISO: string, dateISO: string) => void;
   goRelativeMonth: (delta: -1 | 1) => void;
   toggleMonth: (monthKey: string) => void;
   toggleWeek: (weekKey: string) => void;
-  collapseAll: () => void;
+  toggleAll: () => void;
 };
 
 export function usePlanNavigation(outcome: Outcome | null | undefined, weekStartsOn: WeekStartsOn): PlanNavigation {
@@ -429,11 +439,22 @@ export function usePlanNavigation(outcome: Outcome | null | undefined, weekStart
     setFocusedMonth(monthKey);
   }, [outcome?.id, outcome?.startDate, outcome?.endDate, monthKeys, weekStartsOn]);
 
+  const allWeekKeys = React.useMemo(() => {
+    if (!outcome) return [];
+    return monthKeys.flatMap((monthKey) =>
+      weekStartsForMonth(monthKey, weekStartsOn)
+        .filter((weekStartISO) => daysForWeekInMonth(weekStartISO, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek).length > 0)
+        .map((weekStartISO) => `${monthKey}:${weekStartISO}`)
+    );
+  }, [monthKeys, outcome, weekStartsOn]);
+
   const activeMonthKey = React.useMemo(() => {
     if (focusedMonth && monthKeys.includes(focusedMonth)) return focusedMonth;
     for (const monthKey of monthKeys) if (expandedMonths.has(monthKey)) return monthKey;
     return focusForOutcome(outcome, monthKeys, weekStartsOn).monthKey;
   }, [expandedMonths, focusedMonth, monthKeys, outcome, weekStartsOn]);
+
+  const allExpanded = monthKeys.length > 0 && expandedMonths.size === monthKeys.length && expandedWeekKeys.size === allWeekKeys.length;
 
   function scrollToMonth(monthKey: string) {
     const el = document.getElementById(`month-${monthKey}`);
@@ -494,10 +515,17 @@ export function usePlanNavigation(outcome: Outcome | null | undefined, weekStart
     });
   }
 
-  function collapseAll() {
-    setExpandedMonths(new Set());
-    setExpandedWeekKeys(new Set());
-    setFocusedMonth(null);
+  function toggleAll() {
+    if (allExpanded) {
+      setExpandedMonths(new Set());
+      setExpandedWeekKeys(new Set());
+      setFocusedMonth(null);
+      return;
+    }
+
+    setExpandedMonths(new Set(monthKeys));
+    setExpandedWeekKeys(new Set(allWeekKeys));
+    setFocusedMonth(activeMonthKey ?? monthKeys[0] ?? null);
   }
 
   return {
@@ -505,13 +533,14 @@ export function usePlanNavigation(outcome: Outcome | null | undefined, weekStart
     activeMonthKey,
     expandedMonths,
     expandedWeekKeys,
+    allExpanded,
     goToMonth,
     goToWeek,
     goToDay,
     goRelativeMonth,
     toggleMonth,
     toggleWeek,
-    collapseAll
+    toggleAll
   };
 }
 
@@ -532,7 +561,7 @@ export default function PlanView({
   const showMonthlyObjectives = useAppState((s) => s.ui.showMonthlyObjectives);
   const showWeeklyObjectives = useAppState((s) => s.ui.showWeeklyObjectives);
   const today = todayISO();
-  const { monthKeys, activeMonthKey, expandedMonths, expandedWeekKeys, goToMonth, goToWeek, goToDay, goRelativeMonth, toggleMonth, toggleWeek, collapseAll } =
+  const { monthKeys, activeMonthKey, expandedMonths, expandedWeekKeys, allExpanded, goToMonth, goToWeek, goToDay, goRelativeMonth, toggleMonth, toggleWeek, toggleAll } =
     navigation;
 
   function monthProgress(monthKey: string): { done: number; total: number } {
@@ -553,7 +582,7 @@ export default function PlanView({
             <div className="app-kicker">Plan</div>
             <div className="font-display mt-2 text-lg font-semibold">Fill the plan top-down: outcome to month to week to day.</div>
             <div className="mt-2 text-sm leading-6 app-muted">
-              The view now stays easier to scan: use the month strip, the yardstick, or the open cards below to move around.
+              The view now stays easier to scan: use the month strip, the timeline, or the open cards below to move around.
             </div>
             <div className="mt-2 text-xs app-muted">Active days: {formatDaysOfWeek(outcome.daysOfWeek)}</div>
           </div>
@@ -617,9 +646,9 @@ export default function PlanView({
             <Button
               size="sm"
               variant="ghost"
-              onClick={collapseAll}
+              onClick={toggleAll}
             >
-              Collapse all
+              {allExpanded ? "Collapse all" : "Expand all"}
             </Button>
           </div>
         </div>
@@ -657,7 +686,9 @@ export default function PlanView({
           const monthStoreKey = `${outcome.id}:${monthKey}`;
           const monthTitle = monthly[monthStoreKey]?.title ?? "";
           const { done, total } = monthProgress(monthKey);
-          const monthTone = total ? trafficLightToneFromProgress(done / total) : null;
+          const monthRatio = total ? done / total : 0;
+          const monthPercent = Math.round(monthRatio * 100);
+          const monthTone = total ? trafficLightToneFromProgress(monthRatio) : null;
           const weekStarts = weekStartsForMonth(monthKey, weekStartsOn).filter(
             (ws) => daysForWeekInMonth(ws, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek).length > 0
           );
@@ -689,8 +720,14 @@ export default function PlanView({
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="w-32">
-                      <Progress value={total ? done / total : 0} tone={total ? undefined : "amber"} />
+                    <div className="flex items-center gap-2">
+                      <div className="w-32">
+                        <Progress value={monthRatio} tone={total ? undefined : "amber"} />
+                      </div>
+                      <div className="w-12 text-right leading-none">
+                        <div className="text-[11px] font-semibold tabular-nums">{monthPercent}%</div>
+                        <div className="mt-1 text-[10px] tabular-nums opacity-70">{done}/{total || 0}</div>
+                      </div>
                     </div>
                     <Chevron open={expanded} />
                   </div>
