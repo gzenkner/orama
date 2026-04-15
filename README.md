@@ -13,6 +13,8 @@ npm run dev
 
 Open the URL Vite prints (usually `http://localhost:5173`).
 
+![Orama screenshot](image-1.png)
+
 ## Why Use Orama?
 
 Most planning tools fail in one of two ways:
@@ -29,6 +31,8 @@ You start with an **outcome** with a date range. From there, Orama gives you a c
 - **Days** stay small enough to finish, even when life is busy.
 
 If you have ever felt like your planning system looked organized but still did not help you make progress, Orama is built for that exact gap.
+
+![Orama screenshot](image-2.png)
 
 ## What Makes It Different
 
