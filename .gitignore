@@ -29,6 +29,7 @@ Thumbs.db
 
 ### Personal data (backups, exports, local DBs)
 TODO.txt
+image*.png
 *.html
 !index.html
 personal/

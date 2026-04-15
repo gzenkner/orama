@@ -4,6 +4,15 @@ Orama is a local-first planning app for people who think in outcomes, not loose 
 
 It helps you take one concrete finish line, map it across months, break it into weeks, and turn it into small daily commitments you can actually complete. The result is a planning system that feels structured without becoming heavy.
 
+## Quickstart (Web)
+
+```bash
+npm install
+npm run dev
+```
+
+Open the URL Vite prints (usually `http://localhost:5173`).
+
 ## Why Use Orama?
 
 Most planning tools fail in one of two ways:
@@ -104,9 +113,33 @@ Orama is especially useful if you:
 
 ## Local-First Data
 
-Orama stores data locally in your browser via `localStorage`.
+Orama stores data locally on your machine (no account required).
 
-You can also export and import your data through the built-in backup tools in `Settings`.
+### Web (`npm run dev`)
+
+- Your data is saved in your browser’s site storage for the dev URL (usually `http://localhost:5173`).
+- It’s stored in `localStorage` under the key `orama_state_v1` (this includes your outcome “Notes”, plan, daily items, and coach threads).
+- View it in Chrome: DevTools → `Application` → `Local Storage` → `http://localhost:5173` → `orama_state_v1`.
+
+**Export quickly (Chrome):**
+
+1. DevTools → Console: `copy(localStorage.getItem("orama_state_v1") || "")`
+2. Terminal: `pbpaste > /tmp/orama_state_v1.json && open /tmp/orama_state_v1.json`
+
+**On disk (Chrome, macOS):**
+
+- `~/Library/Application Support/Google/Chrome/Default/Local Storage/leveldb/`  
+  (If you’re using another Chrome profile, use `Profile 1`, `Profile 2`, etc.)
+
+### Desktop (Tauri)
+
+- Data is stored in the OS WebView storage for the app’s bundle identifier (see `src-tauri/tauri.conf.json`).
+  - On macOS this is typically under `~/Library/WebKit/<bundle-id>/`.
+- If you use `Studio`, Orama can write a local log file named `monthly-wizard.log` to the app’s log directory.
+
+### Backup / restore
+
+Use `Settings` in the app to export and import backups.
 
 ## Run Locally
 
@@ -186,7 +219,7 @@ src-tauri/target/release/bundle/macos/Orama.app
 Notes:
 
 - The current Tauri config builds an `.app` bundle, not a DMG installer.
-- The bundle identifier is `com.gabrielzenkner.orama`.
+- The bundle identifier is defined in `src-tauri/tauri.conf.json` (field: `identifier`).
 - If macOS blocks the unsigned app, use Finder's `Open` action or remove quarantine on your own machine before testing.
 
 ## AI Planning With Ollama
@@ -226,3 +259,7 @@ That combination is what makes the app useful.
 ## Status
 
 Orama is already usable as a personal planning tool and desktop app. The product direction is clear: thoughtful planning, local ownership, and less noise than conventional productivity software.
+
+## License
+
+MIT (see `LICENSE`).
