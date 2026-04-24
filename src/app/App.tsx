@@ -26,6 +26,7 @@ import PlanView, { TimelineYardstick, usePlanNavigation } from "./views/PlanView
 import WizardView from "./views/WizardView";
 import CalendarView from "./views/CalendarView";
 import BackupView from "./views/BackupView";
+import ArchiveView from "./views/ArchiveView";
 import { cn } from "./ui/cn";
 
 function firstOutcomeId(outcomes: Outcome[]): string | undefined {
@@ -142,14 +143,36 @@ function SettingsPanel({ compact = false }: { compact?: boolean }) {
 
 function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
   const activeTab = useAppState((s) => s.ui.activeTab);
+  const archivedCount = useAppState((s) => s.archivedOutcomes.length);
   const keys = Object.keys(TAB_META) as AppTab[];
+  const workspaceKeys = keys.filter((key) => key !== "archive" && key !== "overview");
+  const celebrationActive = activeTab === "archive";
 
   return (
     <div className="grid gap-2">
       <div className="app-kicker">Workspace</div>
+      <button
+        type="button"
+        className={cn("app-workspace-button app-workspace-button-celebration", celebrationActive ? "app-workspace-button-active" : "")}
+        title={TAB_META.archive.hint}
+        onClick={() => {
+          actions.setActiveTab("archive");
+          onSelect?.();
+        }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] app-subtle">Celebration</div>
+            <div className="mt-1 truncate font-display text-[1.03rem] font-semibold">{TAB_META.archive.label}</div>
+            <div className="mt-1 text-xs app-muted">Review finished targets and celebrate momentum.</div>
+          </div>
+          <span className="app-workspace-badge">{archivedCount}</span>
+        </div>
+      </button>
+
       <div className="max-h-[21rem] overflow-y-auto pr-1">
         <div className="grid gap-2">
-          {keys.map((key) => {
+          {workspaceKeys.map((key) => {
             const active = activeTab === key;
             const isStudio = key === "wizard";
             const isCoach = key === "coach";
@@ -165,8 +188,7 @@ function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
                 )}
                 title={TAB_META[key].hint}
                 onClick={() => {
-                  if (key === "overview") actions.openOverview("global");
-                  else actions.setActiveTab(key);
+                  actions.setActiveTab(key);
                   onSelect?.();
                 }}
               >
@@ -187,13 +209,19 @@ function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
 
 function OutcomeList({ onSelect }: { onSelect?: () => void }) {
   const outcomes = useAppState((s) => s.outcomes);
+  const archivedOutcomeIds = useAppState((s) => s.archivedOutcomes.map((outcome) => outcome.id));
   const selectedOutcomeId = useAppState((s) => s.selectedOutcomeId);
   const [draggedOutcomeId, setDraggedOutcomeId] = React.useState<string | null>(null);
   const [dropTarget, setDropTarget] = React.useState<{ id: string; position: "before" | "after" } | null>(null);
+  const archivedOutcomeIdSet = React.useMemo(() => new Set(archivedOutcomeIds), [archivedOutcomeIds]);
+  const visibleOutcomes = React.useMemo(
+    () => outcomes.filter((outcome) => !archivedOutcomeIdSet.has(outcome.id)),
+    [archivedOutcomeIdSet, outcomes]
+  );
 
   React.useEffect(() => {
-    if (!selectedOutcomeId && outcomes.length) actions.selectOutcome(firstOutcomeId(outcomes)!);
-  }, [outcomes, selectedOutcomeId]);
+    if (!selectedOutcomeId && visibleOutcomes.length) actions.selectOutcome(firstOutcomeId(visibleOutcomes)!);
+  }, [selectedOutcomeId, visibleOutcomes]);
 
   function clearDragState() {
     setDraggedOutcomeId(null);
@@ -224,10 +252,10 @@ function OutcomeList({ onSelect }: { onSelect?: () => void }) {
     clearDragState();
   }
 
-  if (!outcomes.length) {
+  if (!visibleOutcomes.length) {
     return (
       <div className="rounded-[0.7rem] border border-dashed border-[color:var(--app-border)] px-4 py-5 text-sm app-muted">
-        Create your first outcome to start shaping the workspace.
+        No active outcomes here. Your completed ones are now on the Victory Wall.
       </div>
     );
   }
@@ -235,7 +263,7 @@ function OutcomeList({ onSelect }: { onSelect?: () => void }) {
   return (
     <div className="max-h-[14rem] overflow-y-auto pr-1">
       <div className="grid gap-2">
-        {outcomes.map((outcome) => {
+        {visibleOutcomes.map((outcome) => {
           const active = outcome.id === selectedOutcomeId;
           const theme = getOutcomeTheme(outcome.themeId);
           const showDropBefore = dropTarget?.id === outcome.id && dropTarget.position === "before";
@@ -533,6 +561,8 @@ function OutcomeModal({ open, onClose, outcome }: { open: boolean; onClose: () =
 }
 
 function EmptyState({ onNewOutcome }: { onNewOutcome: () => void }) {
+  const archivedCount = useAppState((s) => s.archivedOutcomes.length);
+
   return (
     <div className="flex h-full w-full items-center justify-center p-6">
       <Card className="app-card-soft w-[min(760px,94vw)] rounded-[1rem] p-8">
@@ -542,10 +572,19 @@ function EmptyState({ onNewOutcome }: { onNewOutcome: () => void }) {
           Give Orama one concrete finish line and a date range. The app will map every month, week, and active day so the work feels
           readable instead of sprawling.
         </div>
-        <div className="mt-6">
+        <div className="mt-6 flex flex-wrap gap-2">
           <Button variant="primary" onClick={onNewOutcome}>
             Create your first outcome
           </Button>
+          {archivedCount ? (
+            <Button
+              onClick={() => {
+                actions.setActiveTab("archive");
+              }}
+            >
+              Open Victory Wall ({archivedCount})
+            </Button>
+          ) : null}
         </div>
       </Card>
     </div>
@@ -628,13 +667,18 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
     };
   }, [tab]);
 
-  if (!outcome) {
+  const tabNeedsOutcome =
+    tab === "coach" || tab === "plan" || tab === "wizard" || tab === "calendar" || (tab === "overview" && overviewScope === "outcome");
+
+  if (!outcome && tabNeedsOutcome) {
     return <EmptyState onNewOutcome={onNewOutcome} />;
   }
 
-  const months = monthKeysInRange(outcome.startDate, outcome.endDate);
-  const hasNotes = outcome.notes.trim().length > 0;
-  const showOutcomeHeader = tab === "plan" || tab === "wizard" || tab === "calendar" || (tab === "overview" && overviewScope === "outcome");
+  const months = outcome ? monthKeysInRange(outcome.startDate, outcome.endDate) : [];
+  const hasNotes = outcome ? outcome.notes.trim().length > 0 : false;
+  const showOutcomeHeader = Boolean(
+    outcome && (tab === "plan" || tab === "wizard" || tab === "calendar" || (tab === "overview" && overviewScope === "outcome"))
+  );
 
   function runPlanJump(jump: () => void) {
     if (tab === "plan") {
@@ -645,9 +689,26 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
     actions.setActiveTab("plan");
   }
 
+  function markOutcomeDone() {
+    if (!outcome) return;
+    const shouldArchive = window.confirm(`Mark "${outcome.title}" as done and feature it in your Victory Wall?`);
+    if (!shouldArchive) return;
+    actions.completeOutcome(outcome.id);
+    actions.setActiveTab("archive");
+  }
+
+  function openOutcomeHistory(outcomeId: string) {
+    actions.openOverview("outcome", outcomeId);
+  }
+
+  function openOutcomeForEdit(outcomeId: string) {
+    openOutcomeHistory(outcomeId);
+    requestAnimationFrame(() => setEditOpen(true));
+  }
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
-      {showOutcomeHeader ? (
+      {showOutcomeHeader && outcome ? (
         <div className="border-b border-[color:var(--app-border)] p-4 sm:p-6">
           <div className="app-card-soft rounded-[0.95rem] p-3 sm:p-4">
             <div className="flex flex-col gap-3">
@@ -679,6 +740,9 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
                     onClick={() => setYardstickExpanded((prev) => !prev)}
                   >
                     Timeline
+                  </Button>
+                  <Button variant="primary" size="sm" title="Mark this outcome done and add it to Victory Wall" onClick={markOutcomeDone}>
+                    Mark done
                   </Button>
                   <Button variant="ghost" size="sm" title="Edit outcome" onClick={() => setEditOpen(true)}>
                     Edit
@@ -731,15 +795,16 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
 
       <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-auto", tab === "coach" ? "" : "p-4 sm:p-6")}>
         {tab === "overview" && overviewScope === "global" ? <OverviewLandingView /> : null}
-        {tab === "overview" && overviewScope === "outcome" ? <OverviewView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
-        {tab === "coach" ? <CoachView outcome={outcome} /> : null}
-        {tab === "plan" ? <PlanView outcome={outcome} weekStartsOn={weekStartsOn} navigation={planNavigation} /> : null}
-        {tab === "wizard" ? <WizardView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
-        {tab === "calendar" ? <CalendarView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
+        {tab === "overview" && overviewScope === "outcome" && outcome ? <OverviewView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
+        {tab === "coach" && outcome ? <CoachView outcome={outcome} /> : null}
+        {tab === "plan" && outcome ? <PlanView outcome={outcome} weekStartsOn={weekStartsOn} navigation={planNavigation} /> : null}
+        {tab === "wizard" && outcome ? <WizardView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
+        {tab === "calendar" && outcome ? <CalendarView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
+        {tab === "archive" ? <ArchiveView onOpenOutcome={openOutcomeHistory} onEditOutcome={openOutcomeForEdit} /> : null}
         {tab === "settings" ? <SettingsView /> : null}
       </div>
 
-      <OutcomeModal open={editOpen} onClose={() => setEditOpen(false)} outcome={outcome} />
+      <OutcomeModal open={Boolean(outcome) && editOpen} onClose={() => setEditOpen(false)} outcome={outcome} />
     </div>
   );
 }

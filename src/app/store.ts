@@ -1,5 +1,16 @@
 import React from "react";
-import type { AppTab, DailyGoal, MonthlyGoal, Outcome, OutcomeCoachThread, OverviewScope, PersistedStateV1, WeekStartsOn, WeeklyGoal } from "./types";
+import type {
+  AppTab,
+  ArchivedOutcome,
+  DailyGoal,
+  MonthlyGoal,
+  Outcome,
+  OutcomeCoachThread,
+  OverviewScope,
+  PersistedStateV1,
+  WeekStartsOn,
+  WeeklyGoal
+} from "./types";
 import { normalizeDaysOfWeek } from "./date";
 import { nextOutcomeThemeId, normalizeOutcomeTheme } from "./theme";
 
@@ -35,6 +46,7 @@ function defaultState(): State {
       scrollTopByTab: {}
     },
     outcomes: [],
+    archivedOutcomes: [],
     monthly: {},
     weekly: {},
     daily: {},
@@ -47,6 +59,28 @@ function normalizeOutcome(outcome: Omit<Outcome, "daysOfWeek"> & { daysOfWeek?: 
     ...outcome,
     daysOfWeek: normalizeDaysOfWeek(outcome.daysOfWeek)
   };
+}
+
+function normalizeArchivedOutcome(
+  outcome: Omit<Outcome, "daysOfWeek"> & { daysOfWeek?: number[]; completedAt?: string },
+  index: number
+): ArchivedOutcome {
+  const normalizedOutcome = normalizeOutcome({
+    ...outcome,
+    themeId: normalizeOutcomeTheme((outcome as Partial<Outcome>).themeId, index)
+  });
+  return {
+    ...normalizedOutcome,
+    completedAt: typeof outcome.completedAt === "string" ? outcome.completedAt : normalizedOutcome.createdAt
+  };
+}
+
+function mergeActiveWithArchived(outcomes: Outcome[], archivedOutcomes: ArchivedOutcome[]): Outcome[] {
+  const outcomeIds = new Set(outcomes.map((outcome) => outcome.id));
+  const restoredFromArchive = archivedOutcomes
+    .filter((outcome) => !outcomeIds.has(outcome.id))
+    .map(({ completedAt: _completedAt, ...outcome }) => outcome);
+  return [...outcomes, ...restoredFromArchive];
 }
 
 function normalizeDailyItems(goal: DailyGoal | undefined): string[] {
@@ -66,6 +100,19 @@ function readState(): State {
     if (!raw) return defaultState();
     const parsed = JSON.parse(raw) as State;
     if (parsed?.version !== 1) return defaultState();
+
+    const outcomes = Array.isArray(parsed.outcomes)
+      ? parsed.outcomes.map((outcome, index) =>
+          normalizeOutcome({
+            ...outcome,
+            themeId: normalizeOutcomeTheme((outcome as Partial<Outcome>).themeId, index)
+          })
+        )
+      : [];
+    const archivedOutcomes = Array.isArray(parsed.archivedOutcomes)
+      ? parsed.archivedOutcomes.map((outcome, index) => normalizeArchivedOutcome(outcome, index))
+      : [];
+
     return {
       ...defaultState(),
       ...parsed,
@@ -79,14 +126,8 @@ function readState(): State {
           overview: 0
         }
       },
-      outcomes: Array.isArray(parsed.outcomes)
-        ? parsed.outcomes.map((outcome, index) =>
-            normalizeOutcome({
-              ...outcome,
-              themeId: normalizeOutcomeTheme((outcome as Partial<Outcome>).themeId, index)
-            })
-          )
-        : [],
+      outcomes: mergeActiveWithArchived(outcomes, archivedOutcomes),
+      archivedOutcomes,
       coachThreads:
         parsed && parsed.coachThreads && typeof parsed.coachThreads === "object" && !Array.isArray(parsed.coachThreads)
           ? parsed.coachThreads
@@ -198,10 +239,18 @@ export const actions = {
     return outcome.id;
   },
   updateOutcome: (id: string, patch: Partial<Pick<Outcome, "title" | "notes" | "startDate" | "endDate" | "daysOfWeek">>) => {
-    store.set((prev) => ({
-      ...prev,
-      outcomes: prev.outcomes.map((o) => (o.id === id ? normalizeOutcome({ ...o, ...patch }) : o))
-    }));
+    store.set((prev) => {
+      const outcomes = prev.outcomes.map((outcome) => (outcome.id === id ? normalizeOutcome({ ...outcome, ...patch }) : outcome));
+      const archivedOutcomes = prev.archivedOutcomes.map((archivedOutcome) => {
+        if (archivedOutcome.id !== id) return archivedOutcome;
+        const { completedAt, ...baseOutcome } = archivedOutcome;
+        return {
+          ...normalizeOutcome({ ...baseOutcome, ...patch }),
+          completedAt
+        };
+      });
+      return { ...prev, outcomes, archivedOutcomes };
+    });
   },
   moveOutcome: (draggedId: string, targetId: string, position: "before" | "after") => {
     store.set((prev) => {
@@ -226,6 +275,7 @@ export const actions = {
     store.set((prev) => {
       const outcomes = prev.outcomes.filter((o) => o.id !== id);
       const selectedOutcomeId = prev.selectedOutcomeId === id ? outcomes[0]?.id : prev.selectedOutcomeId;
+      const archivedOutcomes = prev.archivedOutcomes.filter((o) => o.id !== id);
 
       const prefix = `${id}:`;
       const monthly: Record<string, MonthlyGoal> = {};
@@ -237,7 +287,30 @@ export const actions = {
       const coachThreads: Record<string, OutcomeCoachThread> = {};
       for (const [k, v] of Object.entries(prev.coachThreads)) if (k !== id) coachThreads[k] = v;
 
-      return { ...prev, outcomes, selectedOutcomeId, monthly, weekly, daily, coachThreads };
+      return { ...prev, outcomes, archivedOutcomes, selectedOutcomeId, monthly, weekly, daily, coachThreads };
+    });
+  },
+  completeOutcome: (id: string, completedAt = new Date().toISOString()) => {
+    store.set((prev) => {
+      const outcome = prev.outcomes.find((o) => o.id === id);
+      if (!outcome) return prev;
+
+      const archivedOutcomes = [{ ...outcome, completedAt }, ...prev.archivedOutcomes.filter((o) => o.id !== id)];
+      const archivedOutcomeIdSet = new Set(archivedOutcomes.map((item) => item.id));
+      const firstVisibleOutcomeId = prev.outcomes.find((item) => !archivedOutcomeIdSet.has(item.id))?.id;
+      const selectedOutcomeId = prev.selectedOutcomeId === id ? firstVisibleOutcomeId : prev.selectedOutcomeId;
+      const overviewScope =
+        prev.ui.overviewScope === "outcome" && prev.selectedOutcomeId === id && !selectedOutcomeId ? "global" : prev.ui.overviewScope;
+
+      return {
+        ...prev,
+        archivedOutcomes,
+        selectedOutcomeId,
+        ui: {
+          ...prev.ui,
+          overviewScope
+        }
+      };
     });
   },
   setMonthlyTitle: (outcomeId: string, monthKey: string, title: string) => {
@@ -360,6 +433,19 @@ export const actions = {
   importJSON: (raw: string) => {
     const parsed = JSON.parse(raw) as State;
     if (parsed?.version !== 1) throw new Error("Unsupported state version.");
+
+    const outcomes = Array.isArray(parsed.outcomes)
+      ? parsed.outcomes.map((outcome, index) =>
+          normalizeOutcome({
+            ...outcome,
+            themeId: normalizeOutcomeTheme((outcome as Partial<Outcome>).themeId, index)
+          })
+        )
+      : [];
+    const archivedOutcomes = Array.isArray(parsed.archivedOutcomes)
+      ? parsed.archivedOutcomes.map((outcome, index) => normalizeArchivedOutcome(outcome, index))
+      : [];
+
     store.set(() => ({
       ...defaultState(),
       ...parsed,
@@ -373,14 +459,8 @@ export const actions = {
           overview: 0
         }
       },
-      outcomes: Array.isArray(parsed.outcomes)
-        ? parsed.outcomes.map((outcome, index) =>
-            normalizeOutcome({
-              ...outcome,
-              themeId: normalizeOutcomeTheme((outcome as Partial<Outcome>).themeId, index)
-            })
-          )
-        : [],
+      outcomes: mergeActiveWithArchived(outcomes, archivedOutcomes),
+      archivedOutcomes,
       coachThreads:
         parsed && parsed.coachThreads && typeof parsed.coachThreads === "object" && !Array.isArray(parsed.coachThreads)
           ? parsed.coachThreads
