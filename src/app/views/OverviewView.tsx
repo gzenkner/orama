@@ -35,6 +35,10 @@ function dailyItems(entry: DailyGoal | undefined): string[] {
   return [entry?.title ?? ""];
 }
 
+function hasMeaningfulItems(items: string[]): boolean {
+  return items.some((item) => item.trim().length > 0);
+}
+
 function pluralize(count: number, singular: string, plural = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
@@ -237,6 +241,10 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
   const boardPlannedCount = boardItems.filter((item) => item.trim().length > 0).length;
   const boardDoneCount = boardItems.reduce((count, _, index) => count + (boardItemsDone[index] ? 1 : 0), 0);
   const boardDateIndex = hasActiveDays ? activeDates.indexOf(boardDateISO) + 1 : 0;
+  const boardHasTasks = hasMeaningfulItems(boardItems);
+  const boardIntentionalRest = Boolean(boardEntry?.intentionalRest);
+  const boardHasCommitment = boardHasTasks || boardIntentionalRest;
+  const boardNeedsAcknowledgement = boardDateISO === todayISO && phase === "active" && !boardHasTasks;
 
   const focusDate = parseISODate(boardDateISO);
   const focusMonthKey = monthKeyFromDate(focusDate);
@@ -333,7 +341,7 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
             {hasActiveDays ? (
               <>
                 <div className="mt-4 flex flex-wrap gap-2 text-xs app-muted">
-                  <span>{pluralize(boardPlannedCount, "task")}</span>
+                  <span>{boardIntentionalRest && !boardHasTasks ? "Intentional rest day" : pluralize(boardPlannedCount, "task")}</span>
                   <span>{boardDoneCount}/{boardPlannedCount || 0} done</span>
                   <span>Active day {boardDateIndex}/{activeDates.length}</span>
                 </div>
@@ -386,8 +394,49 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
                   </div>
                 </div>
 
+                {boardNeedsAcknowledgement ? (
+                  <div className="mt-4 rounded-[0.75rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] p-4">
+                    <div className="text-sm font-semibold">
+                      {boardIntentionalRest ? "You have intentionally left today empty." : "Today is still empty."}
+                    </div>
+                    <div className="mt-2 text-sm leading-6 app-muted">
+                      Add at least one task for today, or explicitly acknowledge that you are intentionally not doing anything for this outcome today.
+                    </div>
+                    <button
+                      type="button"
+                      className={cn(
+                        "mt-3 inline-flex items-center gap-2 rounded-[0.65rem] border px-3 py-2 text-sm font-semibold transition",
+                        boardIntentionalRest
+                          ? "app-tab app-tab-active"
+                          : "border-[color:var(--app-border)] bg-[color:var(--app-card)] hover:bg-[color:var(--app-nav-hover)]"
+                      )}
+                      aria-pressed={boardIntentionalRest}
+                      onClick={() => actions.setDailyIntentionalRest(outcome.id, boardDateISO, !boardIntentionalRest)}
+                    >
+                      <span
+                        className={cn(
+                          "inline-flex h-4 w-4 items-center justify-center rounded-[0.3rem] border text-[11px]",
+                          boardIntentionalRest ? "border-current" : "border-[color:var(--app-border)]"
+                        )}
+                      >
+                        {boardIntentionalRest ? "x" : ""}
+                      </span>
+                      I am intentionally not doing anything for this outcome today
+                    </button>
+                  </div>
+                ) : null}
+
                 <div className="mt-5 flex flex-wrap items-center gap-2">
-                  <Button variant={boardEntry?.done ? "secondary" : "primary"} onClick={() => actions.toggleDailyDone(outcome.id, boardDateISO)}>
+                  <Button
+                    variant={boardEntry?.done ? "secondary" : "primary"}
+                    onClick={() => actions.toggleDailyDone(outcome.id, boardDateISO)}
+                    disabled={boardDateISO === todayISO && phase === "active" && !boardHasCommitment}
+                    title={
+                      boardDateISO === todayISO && phase === "active" && !boardHasCommitment
+                        ? "Add a task or acknowledge an intentional rest day first"
+                        : undefined
+                    }
+                  >
                     {boardEntry?.done ? "Mark not done" : boardDateISO === todayISO && phase === "active" ? "Mark today done" : "Mark day done"}
                   </Button>
                   <Button size="sm" onClick={() => actions.setActiveTab("plan")}>

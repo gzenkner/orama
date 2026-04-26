@@ -22,6 +22,7 @@ export function trafficLightToneFromState(state: "open" | "planned" | "done"): T
 
 export function entryHasPlan(entry: DailyGoal | undefined): boolean {
   if (!entry) return false;
+  if (entry.intentionalRest) return true;
   const items = Array.isArray(entry.items) && entry.items.length ? entry.items : [entry.title];
   return items.some((item) => item.trim().length > 0);
 }

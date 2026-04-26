@@ -329,6 +329,11 @@ function OutcomeList({ onSelect }: { onSelect?: () => void }) {
 }
 
 function Sidebar({ onNewOutcome, onHide }: { onNewOutcome: () => void; onHide: () => void }) {
+  function openGlobalOverview() {
+    actions.setScrollTopForTab("overview", 0);
+    actions.openOverview("global");
+  }
+
   return (
     <aside className="app-panel relative flex h-full min-h-0 w-full flex-col rounded-[0.95rem] p-5">
       <Button
@@ -347,7 +352,7 @@ function Sidebar({ onNewOutcome, onHide }: { onNewOutcome: () => void; onHide: (
           type="button"
           className="justify-self-start rounded-[0.55rem] transition hover:opacity-85"
           title="Open overall progress"
-          onClick={() => actions.openOverview("global")}
+          onClick={openGlobalOverview}
         >
           <OramaLogo />
         </button>

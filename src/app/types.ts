@@ -73,6 +73,7 @@ export type DailyGoal = {
   title: string;
   items?: string[];
   itemsDone?: boolean[];
+  intentionalRest?: boolean;
   done: boolean;
   doneAt?: string;
 };

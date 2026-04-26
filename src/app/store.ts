@@ -94,6 +94,10 @@ function normalizeDailyItemsDone(goal: DailyGoal | undefined, items: string[]): 
   return items.map((_, idx) => Boolean(raw[idx]));
 }
 
+function hasMeaningfulDailyItems(items: string[]): boolean {
+  return items.some((item) => item.trim().length > 0);
+}
+
 function readState(): State {
   try {
     const raw = localStorage.getItem(STORAGE_KEY) ?? LEGACY_STORAGE_KEYS.map((key) => localStorage.getItem(key)).find(Boolean);
@@ -163,7 +167,8 @@ function createStore(): Store {
 const store = createStore();
 
 export function useAppState<T>(selector: (s: State) => T): T {
-  return React.useSyncExternalStore(store.subscribe, () => selector(store.get()), () => selector(defaultState()));
+  const state = React.useSyncExternalStore(store.subscribe, store.get, defaultState);
+  return selector(state);
 }
 
 export function getAppState(): State {
@@ -343,6 +348,11 @@ export const actions = {
         nextDaily = { ...nextDaily, title: items[0] ?? "", items, itemsDone };
       }
 
+      const effectiveItems = normalizeDailyItems(nextDaily);
+      if (hasMeaningfulDailyItems(effectiveItems)) {
+        nextDaily = { ...nextDaily, intentionalRest: false };
+      }
+
       return { ...prev, daily: { ...prev.daily, [key]: nextDaily } };
     });
   },
@@ -354,7 +364,13 @@ export const actions = {
       while (items.length <= index) items.push("");
       items[index] = title;
       const itemsDone = normalizeDailyItemsDone(prevDaily, items);
-      return { ...prev, daily: { ...prev.daily, [key]: { ...prevDaily, title: items[0] ?? "", items, itemsDone } } };
+      return {
+        ...prev,
+        daily: {
+          ...prev.daily,
+          [key]: { ...prevDaily, title: items[0] ?? "", items, itemsDone, intentionalRest: hasMeaningfulDailyItems(items) ? false : prevDaily.intentionalRest }
+        }
+      };
     });
   },
   addDailyItem: (outcomeId: string, dateISO: string) => {
@@ -365,7 +381,7 @@ export const actions = {
       const baseDone = normalizeDailyItemsDone(prevDaily, baseItems);
       const items = [...baseItems, ""];
       const itemsDone = [...baseDone, false];
-      return { ...prev, daily: { ...prev.daily, [key]: { ...prevDaily, title: items[0] ?? "", items, itemsDone } } };
+      return { ...prev, daily: { ...prev.daily, [key]: { ...prevDaily, title: items[0] ?? "", items, itemsDone, intentionalRest: false } } };
     });
   },
   removeDailyItem: (outcomeId: string, dateISO: string, index: number) => {
@@ -382,7 +398,13 @@ export const actions = {
         ...prev,
         daily: {
           ...prev.daily,
-          [key]: { ...prevDaily, title: nextItems[0] ?? "", items: nextItems, itemsDone: nextItemsDone }
+          [key]: {
+            ...prevDaily,
+            title: nextItems[0] ?? "",
+            items: nextItems,
+            itemsDone: nextItemsDone,
+            intentionalRest: hasMeaningfulDailyItems(nextItems) ? false : prevDaily.intentionalRest
+          }
         }
       };
     });
@@ -409,6 +431,21 @@ export const actions = {
         daily: {
           ...prev.daily,
           [key]: { ...prevDaily, done, doneAt: done ? new Date().toISOString() : undefined }
+        }
+      };
+    });
+  },
+  setDailyIntentionalRest: (outcomeId: string, dateISO: string, intentionalRest: boolean) => {
+    const key = `${outcomeId}:${dateISO}`;
+    store.set((prev) => {
+      const prevDaily = prev.daily[key] ?? { title: "", done: false };
+      const items = normalizeDailyItems(prevDaily);
+      const canRest = !hasMeaningfulDailyItems(items);
+      return {
+        ...prev,
+        daily: {
+          ...prev.daily,
+          [key]: { ...prevDaily, intentionalRest: canRest ? intentionalRest : false }
         }
       };
     });
