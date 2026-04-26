@@ -1,0 +1,27 @@
+{
+  "name": "orama-primary",
+  "body_font_stack": [
+    "Avenir Next",
+    "Avenir",
+    "SF Pro Text",
+    "-apple-system",
+    "BlinkMacSystemFont",
+    "Segoe UI",
+    "sans-serif"
+  ],
+  "display_font_stack": [
+    "Avenir Next",
+    "Avenir",
+    "SF Pro Display",
+    "-apple-system",
+    "BlinkMacSystemFont",
+    "Segoe UI",
+    "sans-serif"
+  ],
+  "source": "src/styles.css",
+  "usage": {
+    "body_variable": "--font-body",
+    "display_variable": "--font-display",
+    "display_class": ".font-display"
+  }
+}

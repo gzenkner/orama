@@ -1,0 +1,9 @@
+{
+  "name": "orama-logo-v5",
+  "label": "Orama Logo V5",
+  "description": "Active Orama logo asset using the folded map mark and wordmark.",
+  "asset_type": "png",
+  "public_asset_path": "public/orama-logo-v5.png",
+  "alternate_asset_path": "public/orama-logo-v5-white.png",
+  "component_source": "src/app/ui/OramaLogo.tsx"
+}

@@ -1,0 +1,67 @@
+{
+  "name": "outcome-themes",
+  "order": ["apricot", "sage", "sky", "lavender", "butter", "rose"],
+  "themes": {
+    "apricot": {
+      "label": "Apricot",
+      "accent": "#f1c6b2",
+      "accent_strong": "#d78663",
+      "soft": "#fbefe8",
+      "border": "#e8c5b4",
+      "ink": "#6a3e27",
+      "glow": "rgba(215, 134, 99, 0.16)",
+      "glow_strong": "rgba(215, 134, 99, 0.3)"
+    },
+    "sage": {
+      "label": "Sage",
+      "accent": "#c6decb",
+      "accent_strong": "#769d7d",
+      "soft": "#eff6ef",
+      "border": "#c6dbc9",
+      "ink": "#31513a",
+      "glow": "rgba(118, 157, 125, 0.16)",
+      "glow_strong": "rgba(118, 157, 125, 0.3)"
+    },
+    "sky": {
+      "label": "Sky",
+      "accent": "#c4dcf2",
+      "accent_strong": "#6f98bf",
+      "soft": "#eef5fb",
+      "border": "#c3d8eb",
+      "ink": "#234463",
+      "glow": "rgba(111, 152, 191, 0.16)",
+      "glow_strong": "rgba(111, 152, 191, 0.3)"
+    },
+    "lavender": {
+      "label": "Lavender",
+      "accent": "#dbcdf0",
+      "accent_strong": "#8f78b8",
+      "soft": "#f5f0fb",
+      "border": "#d6c8ea",
+      "ink": "#4d356d",
+      "glow": "rgba(143, 120, 184, 0.16)",
+      "glow_strong": "rgba(143, 120, 184, 0.3)"
+    },
+    "butter": {
+      "label": "Butter",
+      "accent": "#f0e0b0",
+      "accent_strong": "#b68c38",
+      "soft": "#fbf7e8",
+      "border": "#eadba9",
+      "ink": "#5d4818",
+      "glow": "rgba(182, 140, 56, 0.16)",
+      "glow_strong": "rgba(182, 140, 56, 0.3)"
+    },
+    "rose": {
+      "label": "Rose",
+      "accent": "#f1c7d4",
+      "accent_strong": "#c67b95",
+      "soft": "#fbf0f4",
+      "border": "#ecc6d2",
+      "ink": "#6a3046",
+      "glow": "rgba(198, 123, 149, 0.16)",
+      "glow_strong": "rgba(198, 123, 149, 0.3)"
+    }
+  },
+  "source": "src/app/theme.ts"
+}

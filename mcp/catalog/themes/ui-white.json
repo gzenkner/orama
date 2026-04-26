@@ -1,0 +1,21 @@
+{
+  "name": "ui-white",
+  "color_scheme": "light",
+  "tokens": {
+    "app_bg": "#f7f2eb",
+    "app_panel": "rgba(255, 255, 255, 0.64)",
+    "app_card": "rgba(255, 255, 255, 0.86)",
+    "app_elevated": "rgba(248, 242, 236, 0.95)",
+    "app_input": "rgba(255, 255, 255, 0.9)",
+    "app_border": "rgba(92, 76, 62, 0.12)",
+    "app_text": "#271f1a",
+    "app_muted": "#6d6259",
+    "app_subtle": "#8e8176",
+    "app_shadow": "rgba(74, 53, 41, 0.1)",
+    "app_backdrop": "rgba(246, 239, 231, 0.72)",
+    "app_nav_hover": "rgba(52, 37, 28, 0.05)",
+    "app_nav_active_bg": "rgba(52, 37, 28, 0.08)",
+    "app_nav_active_border": "rgba(92, 76, 62, 0.18)"
+  },
+  "source": "src/styles.css"
+}

@@ -1,0 +1,33 @@
+{
+  "name": "ui-black",
+  "color_scheme": "dark",
+  "tokens": {
+    "app_bg": "#0f0d0c",
+    "app_panel": "rgba(20, 18, 17, 0.82)",
+    "app_card": "rgba(28, 25, 23, 0.92)",
+    "app_elevated": "rgba(36, 31, 29, 0.98)",
+    "app_input": "rgba(19, 17, 16, 0.96)",
+    "app_border": "rgba(255, 255, 255, 0.09)",
+    "app_text": "#f7f2eb",
+    "app_muted": "#c4b8ad",
+    "app_subtle": "#9e9085",
+    "app_shadow": "rgba(0, 0, 0, 0.44)",
+    "app_backdrop": "rgba(12, 11, 10, 0.78)",
+    "app_nav_hover": "rgba(255, 255, 255, 0.05)",
+    "app_nav_active_bg": "rgba(255, 255, 255, 0.08)",
+    "app_nav_active_border": "rgba(255, 255, 255, 0.14)",
+    "app_signal_red_bg": "rgba(207, 114, 140, 0.18)",
+    "app_signal_red_border": "rgba(207, 114, 140, 0.55)",
+    "app_signal_red_fill": "#f3a4bb",
+    "app_signal_red_text": "#ffdbe5",
+    "app_signal_amber_bg": "rgba(203, 154, 29, 0.17)",
+    "app_signal_amber_border": "rgba(203, 154, 29, 0.54)",
+    "app_signal_amber_fill": "#ffd166",
+    "app_signal_amber_text": "#ffedbd",
+    "app_signal_green_bg": "rgba(47, 141, 89, 0.17)",
+    "app_signal_green_border": "rgba(47, 141, 89, 0.56)",
+    "app_signal_green_fill": "#74e1a2",
+    "app_signal_green_text": "#d5f7e2"
+  },
+  "source": "src/styles.css"
+}

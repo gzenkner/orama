@@ -112,7 +112,7 @@ function YearCalendar({
 
               <div className="mt-3 grid grid-cols-7 gap-1 text-[11px] app-subtle">
                 {weekDayLabels.map((label) => (
-                  <div key={label} className="px-1 py-1">
+                  <div key={label} className="flex aspect-square items-center justify-center px-1 py-1 text-center">
                     {label}
                   </div>
                 ))}
@@ -121,7 +121,7 @@ function YearCalendar({
               <div className="mt-1 grid grid-cols-7 gap-1">
                 {Array.from({ length: totalCells }, (_, index) => {
                   const dayNum = index - offset + 1;
-                  if (dayNum < 1 || dayNum > daysInMonth) return <div key={index} className="h-8 rounded-[0.5rem]" />;
+                  if (dayNum < 1 || dayNum > daysInMonth) return <div key={index} className="aspect-square rounded-[0.5rem]" />;
 
                   const dateISO = toISODate(new Date(year, monthIndex, dayNum));
                   const inRange = isoInRange(dateISO, outcome.startDate, outcome.endDate);
@@ -140,7 +140,10 @@ function YearCalendar({
                   return (
                     <button
                       key={index}
-                      className={cn("h-8 w-full rounded-[0.5rem] border text-xs transition", styles[state])}
+                      className={cn(
+                        "aspect-square w-full rounded-[0.5rem] border text-xs tabular-nums transition",
+                        styles[state]
+                      )}
                       disabled={!active}
                       onClick={() => onSelectDay(dateISO)}
                       title={formatShortDate(dateISO)}
