@@ -98,6 +98,14 @@ function hasMeaningfulDailyItems(items: string[]): boolean {
   return items.some((item) => item.trim().length > 0);
 }
 
+function normalizeAppTab(tab: unknown): AppTab {
+  if (tab === "coach" || tab === "wizard") return "assistant";
+  if (tab === "overview" || tab === "assistant" || tab === "plan" || tab === "calendar" || tab === "archive" || tab === "settings") {
+    return tab;
+  }
+  return "overview";
+}
+
 function readState(): State {
   try {
     const raw = localStorage.getItem(STORAGE_KEY) ?? LEGACY_STORAGE_KEYS.map((key) => localStorage.getItem(key)).find(Boolean);
@@ -123,7 +131,7 @@ function readState(): State {
       ui: {
         ...defaultState().ui,
         ...(parsed as Partial<State>).ui,
-        activeTab: "overview",
+        activeTab: normalizeAppTab((parsed as Partial<State>).ui?.activeTab),
         overviewScope: (parsed as Partial<State>).ui?.overviewScope ?? "global",
         scrollTopByTab: {
           ...((parsed as Partial<State>).ui?.scrollTopByTab ?? {}),
@@ -489,7 +497,7 @@ export const actions = {
       ui: {
         ...defaultState().ui,
         ...(parsed as Partial<State>).ui,
-        activeTab: "overview",
+        activeTab: normalizeAppTab((parsed as Partial<State>).ui?.activeTab),
         overviewScope: (parsed as Partial<State>).ui?.overviewScope ?? "global",
         scrollTopByTab: {
           ...((parsed as Partial<State>).ui?.scrollTopByTab ?? {}),

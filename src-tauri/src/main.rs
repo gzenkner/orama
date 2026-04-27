@@ -14,6 +14,7 @@ const DEFAULT_PLANNING_MODEL: &str = "gemma3:12b";
 const OLLAMA_WARMUP_PROMPT: &str = "Planning assistant warmup. Reply only with READY.";
 static WARMUP_IN_FLIGHT: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static CANCELED_COACH_REQUESTS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+const DESKTOP_BACKUP_FILENAME: &str = "orama-backup-latest.json";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1128,6 +1129,26 @@ fn cancel_coach_outcome_chat(request_id: String) -> Result<String, String> {
   Ok("stopping".to_string())
 }
 
+#[tauri::command]
+fn write_backup_to_desktop(app: tauri::AppHandle, backup_json: String) -> Result<String, String> {
+  let trimmed = backup_json.trim();
+  if trimmed.is_empty() {
+    return Err("The backup payload cannot be empty.".to_string());
+  }
+
+  let desktop_dir = app
+    .path()
+    .desktop_dir()
+    .map_err(|err| format!("Could not locate the Desktop folder: {err}"))?
+    .ok_or_else(|| "The Desktop folder is not available on this machine.".to_string())?;
+
+  let value: Value = serde_json::from_str(trimmed).map_err(|err| format!("The backup payload was not valid JSON: {err}"))?;
+  let rendered = serde_json::to_string_pretty(&value).map_err(|err| format!("Could not render the backup JSON: {err}"))?;
+  let path = desktop_dir.join(DESKTOP_BACKUP_FILENAME);
+  fs::write(&path, rendered).map_err(|err| format!("Could not write the backup file: {err}"))?;
+  Ok(path.to_string_lossy().to_string())
+}
+
 fn main() {
   tauri::Builder::default()
     .invoke_handler(tauri::generate_handler![
@@ -1138,7 +1159,8 @@ fn main() {
       wizard_questions,
       wizard_plan,
       coach_outcome_chat,
-      cancel_coach_outcome_chat
+      cancel_coach_outcome_chat,
+      write_backup_to_desktop
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

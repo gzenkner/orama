@@ -1,6 +1,6 @@
 import React from "react";
 import { actions, useAppState } from "../store";
-import type { DailyGoal, Outcome } from "../types";
+import type { ArchivedOutcome, DailyGoal, Outcome } from "../types";
 import { dateISOsInRange, formatDaysOfWeek, formatShortDate, isoToDayNumber, monthKeysInRange, toISODate } from "../date";
 import { getOutcomeTheme } from "../theme";
 import Button from "../ui/Button";
@@ -37,6 +37,17 @@ type TodaySummary = {
   hasTasks: boolean;
   intentionalRest: boolean;
 };
+
+type OutcomeBoardItem =
+  | {
+      kind: "active";
+      summary: OutcomeSummary;
+    }
+  | {
+      kind: "completed";
+      summary: OutcomeSummary;
+      archivedOutcome: ArchivedOutcome;
+    };
 
 function dailyItems(entry: DailyGoal | undefined): string[] {
   if (Array.isArray(entry?.items) && entry.items.length) return entry.items;
@@ -177,14 +188,34 @@ function OutcomeProgressBars({ summaries }: { summaries: OutcomeSummary[] }) {
 
 export default function OverviewLandingView() {
   const outcomes = useAppState((s) => s.outcomes);
+  const archivedOutcomes = useAppState((s) => s.archivedOutcomes);
   const daily = useAppState((s) => s.daily);
+  const [showCompletedOnBoard, setShowCompletedOnBoard] = React.useState(false);
 
   const todayISO = toISODate(new Date());
   const todayDay = isoToDayNumber(todayISO);
+  const archivedOutcomeIdSet = React.useMemo(() => new Set(archivedOutcomes.map((outcome) => outcome.id)), [archivedOutcomes]);
+  const activeOutcomes = React.useMemo(
+    () => outcomes.filter((outcome) => !archivedOutcomeIdSet.has(outcome.id)),
+    [archivedOutcomeIdSet, outcomes]
+  );
 
   const summaries = React.useMemo(
-    () => outcomes.map((outcome) => summarizeOutcome(outcome, daily, todayISO, todayDay)),
-    [daily, outcomes, todayDay, todayISO]
+    () => activeOutcomes.map((outcome) => summarizeOutcome(outcome, daily, todayISO, todayDay)),
+    [activeOutcomes, daily, todayDay, todayISO]
+  );
+  const archivedSummaries = React.useMemo(
+    () => archivedOutcomes.map((outcome) => ({ archivedOutcome: outcome, summary: summarizeOutcome(outcome, daily, todayISO, todayDay) })),
+    [archivedOutcomes, daily, todayDay, todayISO]
+  );
+  const boardItems = React.useMemo<OutcomeBoardItem[]>(
+    () => [
+      ...summaries.map((summary) => ({ kind: "active", summary }) satisfies OutcomeBoardItem),
+      ...(showCompletedOnBoard
+        ? archivedSummaries.map(({ archivedOutcome, summary }) => ({ kind: "completed", archivedOutcome, summary }) satisfies OutcomeBoardItem)
+        : [])
+    ],
+    [archivedSummaries, showCompletedOnBoard, summaries]
   );
 
   const activeCount = summaries.filter((summary) => summary.phase === "active").length;
@@ -236,7 +267,7 @@ export default function OverviewLandingView() {
         </div>
 
         {todaySummaries.length ? (
-          <div className="mt-3 grid gap-3">
+          <div className="mt-3 grid gap-3 xl:grid-cols-2">
             {todaySummaries.map(({ summary, entry, items, itemsDone, hasTasks, intentionalRest }) => {
               const theme = getOutcomeTheme(summary.outcome.themeId);
               const canClose = hasTasks || intentionalRest;
@@ -247,103 +278,106 @@ export default function OverviewLandingView() {
                   className="rounded-[0.8rem] border p-3"
                   style={{ borderColor: theme.border, background: theme.soft, color: theme.ink }}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0 flex-1">
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+                    <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="inline-flex h-3 w-3 rounded-full border" style={{ borderColor: theme.border, background: theme.accent }} />
                         <div className="truncate text-sm font-semibold">{summary.outcome.title}</div>
-                        <span className="rounded-[0.45rem] border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ borderColor: theme.border }}>
+                        <span
+                          className="rounded-[0.45rem] border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
+                          style={{ borderColor: theme.border }}
+                        >
                           {formatDaysOfWeek(summary.outcome.daysOfWeek)}
                         </span>
                         <span className="text-[11px] opacity-75">
                           {intentionalRest && !hasTasks ? "Intentional rest" : `${taskCount} task${taskCount === 1 ? "" : "s"}`}
                         </span>
                       </div>
-                    </div>
-                    <Button size="sm" onClick={() => actions.openOverview("outcome", summary.outcome.id)}>
-                      Open outcome
-                    </Button>
-                  </div>
 
-                  <div className="mt-3 grid gap-1.5">
-                    {items.map((title, index) => {
-                      const itemDone = Boolean(itemsDone[index]);
-                      return (
-                        <div key={index} className="flex items-center gap-2">
+                      <div className="mt-3 grid gap-1.5">
+                        {items.map((title, index) => {
+                          const itemDone = Boolean(itemsDone[index]);
+                          return (
+                            <div key={index} className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                className="app-check inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[0.4rem] transition"
+                                data-state={itemDone ? "done" : title.trim().length ? "planned" : "none"}
+                                aria-pressed={itemDone}
+                                onClick={() => actions.toggleDailyItemDone(summary.outcome.id, todayISO, index)}
+                              >
+                                x
+                              </button>
+                              <Input
+                                value={title}
+                                onChange={(e) => actions.setDailyItem(summary.outcome.id, todayISO, index, e.target.value)}
+                                placeholder={index === 0 ? "What needs to happen today?" : "Another task..."}
+                                className={cn("h-9 flex-1 rounded-[0.5rem] px-3 text-[13px]", itemDone ? "line-through opacity-70" : "")}
+                              />
+                              <button
+                                type="button"
+                                className="app-ghost-outline inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[0.45rem] text-sm transition"
+                                onClick={() => actions.removeDailyItem(summary.outcome.id, todayISO, index)}
+                              >
+                                -
+                              </button>
+                            </div>
+                          );
+                        })}
+
+                        <div className="flex justify-end">
                           <button
                             type="button"
-                            className="app-check inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[0.4rem] transition"
-                            data-state={itemDone ? "done" : title.trim().length ? "planned" : "none"}
-                            aria-pressed={itemDone}
-                            onClick={() => actions.toggleDailyItemDone(summary.outcome.id, todayISO, index)}
+                            className="app-ghost-outline inline-flex h-7 w-7 items-center justify-center rounded-[0.45rem] text-sm transition"
+                            onClick={() => actions.addDailyItem(summary.outcome.id, todayISO)}
                           >
-                            x
-                          </button>
-                          <Input
-                            value={title}
-                            onChange={(e) => actions.setDailyItem(summary.outcome.id, todayISO, index, e.target.value)}
-                            placeholder={index === 0 ? "What needs to happen today?" : "Another task..."}
-                            className={cn("h-9 flex-1 rounded-[0.5rem] px-3 text-[13px]", itemDone ? "line-through opacity-70" : "")}
-                          />
-                          <button
-                            type="button"
-                            className="app-ghost-outline inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[0.45rem] text-sm transition"
-                            onClick={() => actions.removeDailyItem(summary.outcome.id, todayISO, index)}
-                          >
-                            -
+                            +
                           </button>
                         </div>
-                      );
-                    })}
+                      </div>
 
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        className="app-ghost-outline inline-flex h-7 w-7 items-center justify-center rounded-[0.45rem] text-sm transition"
-                        onClick={() => actions.addDailyItem(summary.outcome.id, todayISO)}
-                      >
-                        +
-                      </button>
+                      {!hasTasks ? (
+                        <div className="mt-2 rounded-[0.65rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-3 py-2 text-[color:var(--app-text)]">
+                          <button
+                            type="button"
+                            className={cn(
+                              "inline-flex items-center gap-2 rounded-[0.55rem] border px-2.5 py-1.5 text-left text-xs font-semibold transition",
+                              intentionalRest
+                                ? "app-tab app-tab-active"
+                                : "border-[color:var(--app-border)] bg-[color:var(--app-card)] hover:bg-[color:var(--app-nav-hover)]"
+                            )}
+                            aria-pressed={intentionalRest}
+                            onClick={() => actions.setDailyIntentionalRest(summary.outcome.id, todayISO, !intentionalRest)}
+                          >
+                            <span
+                              className={cn(
+                                "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[0.3rem] border text-[11px]",
+                                intentionalRest ? "border-current" : "border-[color:var(--app-border)]"
+                              )}
+                            >
+                              {intentionalRest ? "x" : ""}
+                            </span>
+                            I am intentionally not doing anything for this outcome today
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
-                  </div>
 
-                  {!hasTasks ? (
-                    <div className="mt-2 rounded-[0.65rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-3 py-2 text-[color:var(--app-text)]">
-                      <button
-                        type="button"
-                        className={cn(
-                          "inline-flex items-center gap-2 rounded-[0.55rem] border px-2.5 py-1.5 text-xs font-semibold transition",
-                          intentionalRest
-                            ? "app-tab app-tab-active"
-                            : "border-[color:var(--app-border)] bg-[color:var(--app-card)] hover:bg-[color:var(--app-nav-hover)]"
-                        )}
-                        aria-pressed={intentionalRest}
-                        onClick={() => actions.setDailyIntentionalRest(summary.outcome.id, todayISO, !intentionalRest)}
+                    <div className="flex flex-wrap items-center justify-between gap-2 lg:w-[11rem] lg:flex-col lg:items-stretch">
+                      <Button size="sm" onClick={() => actions.openOverview("outcome", summary.outcome.id)}>
+                        Open outcome
+                      </Button>
+                      <Button
+                        variant={entry?.done ? "secondary" : "primary"}
+                        disabled={!canClose}
+                        title={!canClose ? "Add a task or acknowledge an intentional empty day first" : undefined}
+                        onClick={() => actions.toggleDailyDone(summary.outcome.id, todayISO)}
                       >
-                        <span
-                          className={cn(
-                            "inline-flex h-4 w-4 items-center justify-center rounded-[0.3rem] border text-[11px]",
-                            intentionalRest ? "border-current" : "border-[color:var(--app-border)]"
-                          )}
-                        >
-                          {intentionalRest ? "x" : ""}
-                        </span>
-                        I am intentionally not doing anything for this outcome today
-                      </button>
-                    </div>
-                  ) : null}
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Button
-                      variant={entry?.done ? "secondary" : "primary"}
-                      disabled={!canClose}
-                      title={!canClose ? "Add a task or acknowledge an intentional empty day first" : undefined}
-                      onClick={() => actions.toggleDailyDone(summary.outcome.id, todayISO)}
-                    >
-                      {entry?.done ? "Mark not done" : "Mark today done"}
-                    </Button>
-                    <div className="text-[11px] app-muted">
-                      {hasTasks ? `${taskCount} task${taskCount === 1 ? "" : "s"}` : "No tasks"}
+                        {entry?.done ? "Mark not done" : "Mark today done"}
+                      </Button>
+                      <div className="text-[11px] app-muted lg:text-right">
+                        {hasTasks ? `${taskCount} task${taskCount === 1 ? "" : "s"}` : "No tasks"}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -467,17 +501,37 @@ export default function OverviewLandingView() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_340px]">
         <Card className="rounded-[0.9rem] p-5">
-          <div className="app-kicker">Outcome board</div>
-          <div className="mt-2 text-base font-semibold">Progress by outcome.</div>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="app-kicker">Outcome board</div>
+              <div className="mt-2 text-base font-semibold">Progress by outcome.</div>
+            </div>
+            {archivedSummaries.length ? (
+              <Button
+                size="sm"
+                variant={showCompletedOnBoard ? "secondary" : "ghost"}
+                onClick={() => setShowCompletedOnBoard((prev) => !prev)}
+              >
+                {showCompletedOnBoard ? "Hide completed" : "Show completed"}
+              </Button>
+            ) : null}
+          </div>
 
           <div className="mt-4 grid gap-2.5">
-            {summaries.map((summary) => {
+            {boardItems.map((item) => {
+              const summary = item.summary;
               const theme = getOutcomeTheme(summary.outcome.themeId);
-              const copy = phaseCopy(summary);
+              const copy =
+                item.kind === "completed"
+                  ? {
+                      label: "Completed",
+                      detail: `Victory Wall on ${formatShortDate(item.archivedOutcome.completedAt.slice(0, 10))}`
+                    }
+                  : phaseCopy(summary);
 
               return (
                 <button
-                  key={summary.outcome.id}
+                  key={`${item.kind}:${summary.outcome.id}`}
                   type="button"
                   className="rounded-[0.8rem] border px-4 py-3 text-left transition hover:bg-[color:var(--app-nav-hover)]"
                   style={{
@@ -485,6 +539,10 @@ export default function OverviewLandingView() {
                     background: theme.soft
                   }}
                   onClick={() => {
+                    if (item.kind === "completed") {
+                      actions.setActiveTab("archive");
+                      return;
+                    }
                     actions.selectOutcome(summary.outcome.id);
                     actions.setActiveTab("plan");
                   }}
@@ -499,7 +557,7 @@ export default function OverviewLandingView() {
                     <div
                       className={cn(
                         "rounded-[0.55rem] border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]",
-                        trafficLightSurfaceClass(summary.phaseTone)
+                        item.kind === "completed" ? trafficLightSurfaceClass("green") : trafficLightSurfaceClass(summary.phaseTone)
                       )}
                     >
                       {copy.label}
@@ -520,7 +578,7 @@ export default function OverviewLandingView() {
 
                   <div className="mt-2 flex flex-wrap gap-2 text-[11px]" style={{ color: theme.ink, opacity: 0.72 }}>
                     <span>{pluralize(summary.activeDates.length, "day")}</span>
-                    <span>{pluralize(summary.openDaysLeft, "open day")} left</span>
+                    <span>{item.kind === "completed" ? "In Victory Wall" : `${pluralize(summary.openDaysLeft, "open day")} left`}</span>
                     <span>{pluralize(summary.monthCount, "month")}</span>
                   </div>
                 </button>

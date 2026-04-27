@@ -21,9 +21,8 @@ import { TAB_META } from "./ui/Tabs";
 import Textarea from "./ui/Textarea";
 import OverviewView from "./views/OverviewView";
 import OverviewLandingView from "./views/OverviewLandingView";
-import CoachView from "./views/CoachView";
+import PlanningAssistantView from "./views/PlanningAssistantView";
 import PlanView, { TimelineYardstick, usePlanNavigation } from "./views/PlanView";
-import WizardView from "./views/WizardView";
 import CalendarView from "./views/CalendarView";
 import BackupView from "./views/BackupView";
 import ArchiveView from "./views/ArchiveView";
@@ -170,12 +169,11 @@ function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
         </div>
       </button>
 
-      <div className="max-h-[21rem] overflow-y-auto pr-1">
+      <div className="pr-1">
         <div className="grid gap-2">
           {workspaceKeys.map((key) => {
             const active = activeTab === key;
-            const isStudio = key === "wizard";
-            const isCoach = key === "coach";
+            const isAssistant = key === "assistant";
             return (
               <button
                 key={key}
@@ -195,8 +193,7 @@ function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
                 <div className="flex items-center gap-3">
                   <span className="inline-flex h-3.5 w-3.5 shrink-0 rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-elevated)]" />
                   <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">{TAB_META[key].label}</div>
-                  {isStudio ? <span className="app-workspace-badge app-workspace-badge-ai">AI</span> : null}
-                  {isCoach ? <span className="app-workspace-badge app-workspace-badge-chat">Chat</span> : null}
+                  {isAssistant ? <span className="app-workspace-badge app-workspace-badge-ai">AI</span> : null}
                 </div>
               </button>
             );
@@ -261,9 +258,8 @@ function OutcomeList({ onSelect }: { onSelect?: () => void }) {
   }
 
   return (
-    <div className="max-h-[14rem] overflow-y-auto pr-1">
-      <div className="grid gap-2">
-        {visibleOutcomes.map((outcome) => {
+    <div className="grid gap-2 pr-1">
+      {visibleOutcomes.map((outcome) => {
           const active = outcome.id === selectedOutcomeId;
           const theme = getOutcomeTheme(outcome.themeId);
           const showDropBefore = dropTarget?.id === outcome.id && dropTarget.position === "before";
@@ -323,7 +319,6 @@ function OutcomeList({ onSelect }: { onSelect?: () => void }) {
             </div>
           );
         })}
-      </div>
     </div>
   );
 }
@@ -335,7 +330,7 @@ function Sidebar({ onNewOutcome, onHide }: { onNewOutcome: () => void; onHide: (
   }
 
   return (
-    <aside className="app-panel relative flex h-full min-h-0 w-full flex-col rounded-[0.95rem] p-5">
+    <aside className="app-panel relative flex h-full min-h-0 w-full flex-col overflow-y-auto rounded-[0.95rem] p-5">
       <Button
         variant="ghost"
         size="sm"
@@ -358,7 +353,7 @@ function Sidebar({ onNewOutcome, onHide }: { onNewOutcome: () => void; onHide: (
         </button>
       </div>
 
-      <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="mt-4 flex min-h-0 flex-1 flex-col">
         <div className="pl-4 pr-1">
           <div className="flex items-center justify-between gap-3">
             <div className="app-kicker">Outcomes</div>
@@ -377,7 +372,7 @@ function Sidebar({ onNewOutcome, onHide }: { onNewOutcome: () => void; onHide: (
           </div>
         </div>
 
-        <div className="mt-4 min-h-0 shrink-0 border-t border-[color:var(--app-border)] pt-4">
+        <div className="mt-4 border-t border-[color:var(--app-border)] pt-4">
           <WorkspaceNav />
         </div>
       </div>
@@ -672,8 +667,7 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
     };
   }, [tab]);
 
-  const tabNeedsOutcome =
-    tab === "coach" || tab === "plan" || tab === "wizard" || tab === "calendar" || (tab === "overview" && overviewScope === "outcome");
+  const tabNeedsOutcome = tab === "assistant" || tab === "plan" || tab === "calendar" || (tab === "overview" && overviewScope === "outcome");
 
   if (!outcome && tabNeedsOutcome) {
     return <EmptyState onNewOutcome={onNewOutcome} />;
@@ -681,9 +675,7 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
 
   const months = outcome ? monthKeysInRange(outcome.startDate, outcome.endDate) : [];
   const hasNotes = outcome ? outcome.notes.trim().length > 0 : false;
-  const showOutcomeHeader = Boolean(
-    outcome && (tab === "plan" || tab === "wizard" || tab === "calendar" || (tab === "overview" && overviewScope === "outcome"))
-  );
+  const showOutcomeHeader = Boolean(outcome && (tab === "plan" || tab === "calendar" || (tab === "overview" && overviewScope === "outcome")));
 
   function runPlanJump(jump: () => void) {
     if (tab === "plan") {
@@ -798,12 +790,11 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
         </div>
       ) : null}
 
-      <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-auto", tab === "coach" ? "" : "p-4 sm:p-6")}>
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
         {tab === "overview" && overviewScope === "global" ? <OverviewLandingView /> : null}
         {tab === "overview" && overviewScope === "outcome" && outcome ? <OverviewView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
-        {tab === "coach" && outcome ? <CoachView outcome={outcome} /> : null}
+        {tab === "assistant" && outcome ? <PlanningAssistantView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
         {tab === "plan" && outcome ? <PlanView outcome={outcome} weekStartsOn={weekStartsOn} navigation={planNavigation} /> : null}
-        {tab === "wizard" && outcome ? <WizardView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
         {tab === "calendar" && outcome ? <CalendarView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
         {tab === "archive" ? <ArchiveView onOpenOutcome={openOutcomeHistory} onEditOutcome={openOutcomeForEdit} /> : null}
         {tab === "settings" ? <SettingsView /> : null}
