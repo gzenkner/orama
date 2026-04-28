@@ -133,6 +133,7 @@ function readState(): State {
         ...(parsed as Partial<State>).ui,
         activeTab: normalizeAppTab((parsed as Partial<State>).ui?.activeTab),
         overviewScope: (parsed as Partial<State>).ui?.overviewScope ?? "global",
+        themeMode: "white",
         scrollTopByTab: {
           ...((parsed as Partial<State>).ui?.scrollTopByTab ?? {}),
           overview: 0
@@ -499,6 +500,7 @@ export const actions = {
         ...(parsed as Partial<State>).ui,
         activeTab: normalizeAppTab((parsed as Partial<State>).ui?.activeTab),
         overviewScope: (parsed as Partial<State>).ui?.overviewScope ?? "global",
+        themeMode: "white",
         scrollTopByTab: {
           ...((parsed as Partial<State>).ui?.scrollTopByTab ?? {}),
           overview: 0

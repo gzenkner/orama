@@ -140,6 +140,80 @@ function SettingsPanel({ compact = false }: { compact?: boolean }) {
   );
 }
 
+function WorkspaceIcon({ tab }: { tab: AppTab }) {
+  const commonProps = {
+    viewBox: "0 0 20 20",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    className: "h-[1.4rem] w-[1.4rem]"
+  };
+
+  if (tab === "calendar") {
+    return (
+      <svg {...commonProps} aria-hidden="true">
+        <rect x="3" y="4.5" width="14" height="12" rx="2" />
+        <path d="M6.5 3.5v3" />
+        <path d="M13.5 3.5v3" />
+        <path d="M3 8.5h14" />
+      </svg>
+    );
+  }
+
+  if (tab === "plan") {
+    return (
+      <svg {...commonProps} aria-hidden="true">
+        <path d="M4 5.5h12" />
+        <path d="M4 10h8" />
+        <path d="M4 14.5h6" />
+        <path d="M14 9l1.5 1.5L18 7.5" />
+      </svg>
+    );
+  }
+
+  if (tab === "assistant") {
+    return (
+      <svg {...commonProps} aria-hidden="true">
+        <path d="M10 3.5l1.2 2.7 2.8.3-2.1 2 0.6 2.9-2.5-1.5-2.5 1.5 0.6-2.9-2.1-2 2.8-.3L10 3.5z" />
+        <path d="M14.5 12.5l0.5 1.1 1.2 0.2-0.9 0.9 0.2 1.2-1-0.6-1 0.6 0.2-1.2-0.9-0.9 1.2-0.2 0.5-1.1z" />
+      </svg>
+    );
+  }
+
+  if (tab === "settings") {
+    return (
+      <svg {...commonProps} aria-hidden="true">
+        <circle cx="10" cy="10" r="2.3" />
+        <path d="M10 3.8l1 0.4 0.4 1.4 1.5 0.6 1.2-0.7 1 1-0.7 1.2 0.6 1.5 1.4 0.4 0.4 1-0.4 1-1.4 0.4-0.6 1.5 0.7 1.2-1 1-1.2-0.7-1.5 0.6-0.4 1.4-1 0.4-1-0.4-0.4-1.4-1.5-0.6-1.2 0.7-1-1 0.7-1.2-0.6-1.5-1.4-0.4-0.4-1 0.4-1 1.4-0.4 0.6-1.5-0.7-1.2 1-1 1.2 0.7 1.5-0.6 0.4-1.4 1-0.4z" />
+      </svg>
+    );
+  }
+
+  if (tab === "archive") {
+    return (
+      <svg {...commonProps} aria-hidden="true">
+        <path d="M10 4.5l1.6 3.2 3.5 0.5-2.5 2.4 0.6 3.4-3.2-1.7-3.2 1.7 0.6-3.4-2.5-2.4 3.5-0.5L10 4.5z" />
+      </svg>
+    );
+  }
+
+  return null;
+}
+
+function CollapsedBrandMark() {
+  return (
+    <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-[0.75rem]" aria-hidden="true">
+      <img
+        src="/orama-logo-v4-calendar.png"
+        alt=""
+        className="h-6 w-6 object-contain"
+      />
+    </div>
+  );
+}
+
 function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
   const activeTab = useAppState((s) => s.ui.activeTab);
   const archivedCount = useAppState((s) => s.archivedOutcomes.length);
@@ -160,6 +234,9 @@ function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
         }}
       >
         <div className="flex items-start justify-between gap-3">
+          <div className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.8rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] text-[color:var(--app-muted)]">
+            <WorkspaceIcon tab="archive" />
+          </div>
           <div className="min-w-0">
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] app-subtle">Celebration</div>
             <div className="mt-1 truncate font-display text-[1.03rem] font-semibold">{TAB_META.archive.label}</div>
@@ -191,7 +268,9 @@ function WorkspaceNav({ onSelect }: { onSelect?: () => void }) {
                 }}
               >
                 <div className="flex items-center gap-3">
-                  <span className="inline-flex h-3.5 w-3.5 shrink-0 rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-elevated)]" />
+                  <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.8rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] text-[color:var(--app-muted)]">
+                    <WorkspaceIcon tab={key} />
+                  </span>
                   <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">{TAB_META[key].label}</div>
                   {isAssistant ? <span className="app-workspace-badge app-workspace-badge-ai">AI</span> : null}
                 </div>
@@ -330,16 +409,16 @@ function Sidebar({ onNewOutcome, onHide }: { onNewOutcome: () => void; onHide: (
   }
 
   return (
-    <aside className="app-panel relative flex h-full min-h-0 w-full flex-col overflow-y-auto rounded-[0.95rem] p-5">
+    <aside className="app-panel relative flex h-full min-h-0 w-full flex-col overflow-y-auto rounded-none border-r border-[color:var(--app-border)] p-5">
       <Button
         variant="ghost"
         size="sm"
         title="Collapse sidebar"
         aria-label="Collapse sidebar"
         onClick={onHide}
-        className="absolute right-5 top-5 w-9 justify-center border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-0 hover:bg-[color:var(--app-card)]"
+        className="absolute right-5 top-5 h-8 w-8 justify-center rounded-full border border-transparent bg-transparent px-0 text-[color:var(--app-subtle)] hover:border-[color:var(--app-border)] hover:bg-[color:var(--app-nav-hover)] hover:text-[color:var(--app-text)]"
       >
-        {"<"}
+        <span className="text-base leading-none">‹</span>
       </Button>
 
       <div className="grid gap-3 pr-16">
@@ -354,7 +433,7 @@ function Sidebar({ onNewOutcome, onHide }: { onNewOutcome: () => void; onHide: (
       </div>
 
       <div className="mt-4 flex min-h-0 flex-1 flex-col">
-        <div className="pl-4 pr-1">
+        <div className="pl-4 pr-16">
           <div className="flex items-center justify-between gap-3">
             <div className="app-kicker">Outcomes</div>
             <button
@@ -375,6 +454,104 @@ function Sidebar({ onNewOutcome, onHide }: { onNewOutcome: () => void; onHide: (
         <div className="mt-4 border-t border-[color:var(--app-border)] pt-4">
           <WorkspaceNav />
         </div>
+      </div>
+    </aside>
+  );
+}
+
+function CollapsedSidebar({ onShow }: { onShow: () => void }) {
+  const outcomes = useAppState((s) => s.outcomes);
+  const archivedOutcomeIds = useAppState((s) => s.archivedOutcomes.map((outcome) => outcome.id));
+  const selectedOutcomeId = useAppState((s) => s.selectedOutcomeId);
+  const activeTab = useAppState((s) => s.ui.activeTab);
+  const archivedOutcomeIdSet = React.useMemo(() => new Set(archivedOutcomeIds), [archivedOutcomeIds]);
+  const visibleOutcomes = React.useMemo(
+    () => outcomes.filter((outcome) => !archivedOutcomeIdSet.has(outcome.id)),
+    [archivedOutcomeIdSet, outcomes]
+  );
+  const collapsedWorkspaceKeys: AppTab[] = ["assistant", "plan", "calendar", "archive", "settings"];
+
+  return (
+    <aside className="app-panel flex h-full min-h-0 w-full flex-col items-center overflow-x-hidden rounded-none border-r border-[color:var(--app-border)] px-2 py-5">
+      <button
+        type="button"
+        title="Open overview"
+        aria-label="Open overview"
+        onClick={() => {
+          actions.setScrollTopForTab("overview", 0);
+          actions.openOverview("global");
+        }}
+        className={cn(
+          "flex h-10 w-10 items-center justify-center rounded-[0.9rem] border transition",
+          activeTab === "overview"
+            ? "border-[color:var(--app-border)] bg-[color:var(--app-card)]"
+            : "border-transparent bg-transparent hover:border-[color:var(--app-border)] hover:bg-[color:var(--app-nav-hover)]"
+        )}
+      >
+        <CollapsedBrandMark />
+      </button>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        title="Show sidebar"
+        aria-label="Show sidebar"
+        onClick={onShow}
+        className="mt-3 h-10 w-10 justify-center rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-0 text-[color:var(--app-muted)] shadow-none hover:bg-[color:var(--app-card)] hover:text-[color:var(--app-text)]"
+      >
+        <span className="text-lg leading-none">›</span>
+      </Button>
+
+      <div className="mt-5 h-px w-8 bg-[color:var(--app-border)]" />
+
+      <div className="mt-5 flex min-h-0 flex-1 flex-col items-center gap-3 overflow-y-auto overflow-x-hidden">
+        {visibleOutcomes.map((outcome) => {
+          const theme = getOutcomeTheme(outcome.themeId);
+          const active = outcome.id === selectedOutcomeId;
+          return (
+            <button
+              key={outcome.id}
+              type="button"
+              title={outcome.title}
+              aria-label={`Open ${outcome.title}`}
+              onClick={() => actions.openOverview("outcome", outcome.id)}
+              className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-full border transition",
+                active
+                  ? "border-[color:var(--app-text)] bg-[color:var(--app-card)] shadow-[0_6px_16px_rgba(74,53,41,0.08)]"
+                  : "border-transparent bg-transparent hover:border-[color:var(--app-border)] hover:bg-[color:var(--app-nav-hover)]"
+              )}
+            >
+              <span
+                className="block h-3.5 w-3.5 rounded-full border"
+                style={{ borderColor: theme.border, background: theme.accent }}
+              />
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 flex flex-col items-center gap-2 overflow-x-hidden">
+        {collapsedWorkspaceKeys.map((key) => {
+          const active = activeTab === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              title={TAB_META[key].label}
+              aria-label={TAB_META[key].label}
+              onClick={() => actions.setActiveTab(key)}
+              className={cn(
+                "flex h-14 w-14 items-center justify-center rounded-full border text-[color:var(--app-muted)] transition",
+                active
+                  ? "border-[color:var(--app-border)] bg-[color:var(--app-card)] text-[color:var(--app-text)]"
+                  : "border-transparent bg-transparent text-[color:var(--app-subtle)] hover:border-[color:var(--app-border)] hover:bg-[color:var(--app-nav-hover)] hover:text-[color:var(--app-text)]"
+              )}
+            >
+              <WorkspaceIcon tab={key} />
+            </button>
+          );
+        })}
       </div>
     </aside>
   );
@@ -855,25 +1032,16 @@ export default function App() {
   const themeId = selectedOutcome?.themeId ?? OUTCOME_THEME_ORDER[0];
 
   return (
-    <div className="app-shell h-dvh w-dvw" data-app-theme={themeMode} style={getOutcomeThemeStyle(themeId)}>
+    <div className="app-shell h-full w-full" data-app-theme="white" style={getOutcomeThemeStyle(themeId)}>
       <div
         className={cn(
-          "relative grid h-full w-full grid-cols-1 gap-4 p-3 sm:p-4",
-          sidebarHidden ? "sm:grid-cols-[minmax(0,1fr)]" : "sm:grid-cols-[300px_minmax(0,1fr)]"
+          "relative grid h-full w-full grid-cols-1 gap-0 p-0",
+          sidebarHidden ? "sm:grid-cols-[64px_minmax(0,1fr)]" : "sm:grid-cols-[300px_minmax(0,1fr)]"
         )}
       >
         {sidebarHidden ? (
-          <div className="absolute left-4 top-4 z-20 hidden sm:flex">
-            <Button
-              variant="ghost"
-              size="sm"
-              title="Show sidebar"
-              aria-label="Show sidebar"
-              onClick={() => setSidebarHidden(false)}
-              className="w-9 justify-center border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-0 hover:bg-[color:var(--app-card)]"
-            >
-              {">"}
-            </Button>
+          <div className="hidden min-h-0 sm:block">
+            <CollapsedSidebar onShow={() => setSidebarHidden(false)} />
           </div>
         ) : null}
 
@@ -883,13 +1051,13 @@ export default function App() {
           </div>
         ) : null}
 
-        <div className="flex min-h-0 flex-col gap-4">
+        <div className="flex min-h-0 flex-col gap-0">
           <div className="sm:hidden">
             <MobileHeader onNewOutcome={() => setCreateOpen(true)} />
           </div>
 
-          <main className="app-panel min-h-0 flex-1 overflow-hidden rounded-[1rem]">
-            <div className="app-main-panel h-full rounded-[1rem]">
+          <main className="app-panel min-h-0 flex-1 overflow-hidden rounded-none border-0">
+            <div className="app-main-panel h-full rounded-none border-0 shadow-none">
               <Main onNewOutcome={() => setCreateOpen(true)} />
             </div>
           </main>

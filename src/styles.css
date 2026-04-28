@@ -46,6 +46,7 @@
   body,
   #root {
     height: 100%;
+    width: 100%;
   }
 
   body {
@@ -87,6 +88,8 @@
     overflow: hidden;
     background: var(--app-bg);
     color: var(--app-text);
+    min-height: 100%;
+    min-width: 100%;
   }
 
   .app-shell::before {
