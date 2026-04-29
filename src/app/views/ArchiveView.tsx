@@ -1,8 +1,7 @@
 import React from "react";
 import { actions, useAppState } from "../store";
 import type { ArchivedOutcome, DailyGoal } from "../types";
-import { dateISOsInRange, dayNumberToISO, formatDaysOfWeek, formatShortDate, isoToDayNumber, toISODate } from "../date";
-import { getOutcomeTheme, getOutcomeThemeStyle } from "../theme";
+import { dateISOsInRange, dayNumberToISO, formatDaysOfWeek, formatShortDate, isoToDayNumber, lastFullyElapsedDateISO, toISODate } from "../date";
 import Button from "../ui/Button";
 import Card from "../ui/Card";
 import Progress from "../ui/Progress";
@@ -31,6 +30,7 @@ function summarizeArchivedOutcome(outcome: ArchivedOutcome, daily: Record<string
   const startDay = isoToDayNumber(outcome.startDate);
   const endDay = isoToDayNumber(outcome.endDate);
   const completedDay = isoToDayNumber(completedDateISO);
+  const lastElapsedDay = isoToDayNumber(lastFullyElapsedDateISO());
 
   const plannedDurationDays = Math.max(endDay - startDay + 1, 1);
   const actualDurationDays = Math.max(completedDay - startDay + 1, 1);
@@ -40,9 +40,13 @@ function summarizeArchivedOutcome(outcome: ArchivedOutcome, daily: Record<string
   const aheadPercent = Math.round(((plannedDurationDays - actualDurationDays) / plannedDurationDays) * 100);
 
   const consistencyDates =
-    completedDay < startDay
+    Math.min(completedDay, lastElapsedDay) < startDay
       ? []
-      : dateISOsInRange(outcome.startDate, dayNumberToISO(Math.min(Math.max(completedDay, startDay), endDay)), outcome.daysOfWeek);
+      : dateISOsInRange(
+          outcome.startDate,
+          dayNumberToISO(Math.min(Math.max(Math.min(completedDay, lastElapsedDay), startDay), endDay)),
+          outcome.daysOfWeek
+        );
   const consistencyDone = consistencyDates.reduce((count, dateISO) => count + (daily[`${outcome.id}:${dateISO}`]?.done ? 1 : 0), 0);
   const consistencyTotal = consistencyDates.length;
   const consistencyRatio = consistencyTotal ? consistencyDone / consistencyTotal : 0;
@@ -152,7 +156,6 @@ export default function ArchiveView({
       {summaries.length ? (
         <div className="grid gap-3">
           {summaries.map((summary) => {
-            const theme = getOutcomeTheme(summary.outcome.themeId);
             const timelineValue = Math.min(summary.actualDurationDays / summary.plannedDurationDays, 1);
             const timelineSignalLabel =
               summary.aheadDays > 0 ? `${summary.aheadDays} day${summary.aheadDays === 1 ? "" : "s"} early` : summary.aheadDays === 0 ? "on target" : `${Math.abs(summary.aheadDays)} day${Math.abs(summary.aheadDays) === 1 ? "" : "s"} late`;
@@ -164,16 +167,10 @@ export default function ArchiveView({
                   : `${Math.abs(summary.aheadPercent)}% slower than planned`;
 
             return (
-              <Card key={summary.outcome.id} className="rounded-[0.9rem] border p-4 sm:p-5" style={getOutcomeThemeStyle(summary.outcome.themeId)}>
+              <Card key={summary.outcome.id} className="rounded-[0.9rem] border border-[color:var(--app-border)] bg-[color:var(--app-card)] p-4 sm:p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        style={getOutcomeThemeStyle(summary.outcome.themeId)}
-                        className="app-outcome-pill rounded-[0.55rem] px-3 py-1 text-xs font-semibold"
-                      >
-                        {theme.label}
-                      </span>
                       <span className="app-pill rounded-[0.55rem] px-3 py-1 text-xs font-semibold">{formatDaysOfWeek(summary.outcome.daysOfWeek)}</span>
                     </div>
                     <button

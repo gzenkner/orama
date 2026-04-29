@@ -340,7 +340,6 @@ function OutcomeList({ onSelect }: { onSelect?: () => void }) {
     <div className="grid gap-2 pr-1">
       {visibleOutcomes.map((outcome) => {
           const active = outcome.id === selectedOutcomeId;
-          const theme = getOutcomeTheme(outcome.themeId);
           const showDropBefore = dropTarget?.id === outcome.id && dropTarget.position === "before";
           const showDropAfter = dropTarget?.id === outcome.id && dropTarget.position === "after";
 
@@ -387,10 +386,7 @@ function OutcomeList({ onSelect }: { onSelect?: () => void }) {
                 title="Drag to reorder outcomes"
               >
                 <div className="flex items-center gap-3">
-                  <span
-                    className="inline-flex h-3.5 w-3.5 shrink-0 rounded-full border"
-                    style={{ borderColor: theme.border, background: theme.accent }}
-                  />
+                  <span className="inline-flex h-3.5 w-3.5 shrink-0 rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-elevated)]" />
                   <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">{outcome.title}</div>
                   <div className="shrink-0 text-[8px] uppercase tracking-[0.18em] app-muted">Drag</div>
                 </div>
@@ -506,7 +502,6 @@ function CollapsedSidebar({ onShow }: { onShow: () => void }) {
 
       <div className="mt-5 flex min-h-0 flex-1 flex-col items-center gap-3 overflow-y-auto overflow-x-hidden">
         {visibleOutcomes.map((outcome) => {
-          const theme = getOutcomeTheme(outcome.themeId);
           const active = outcome.id === selectedOutcomeId;
           return (
             <button
@@ -522,10 +517,7 @@ function CollapsedSidebar({ onShow }: { onShow: () => void }) {
                   : "border-transparent bg-transparent hover:border-[color:var(--app-border)] hover:bg-[color:var(--app-nav-hover)]"
               )}
             >
-              <span
-                className="block h-3.5 w-3.5 rounded-full border"
-                style={{ borderColor: theme.border, background: theme.accent }}
-              />
+              <span className="block h-3.5 w-3.5 rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-elevated)]" />
             </button>
           );
         })}

@@ -9,6 +9,7 @@ import {
   formatWeekLabel,
   isoToDayNumber,
   isDateActive,
+  lastFullyElapsedDateISO,
   monthKeysInRange,
   parseISODate,
   startOfWeek,
@@ -561,6 +562,7 @@ export default function PlanView({
   const showMonthlyObjectives = useAppState((s) => s.ui.showMonthlyObjectives);
   const showWeeklyObjectives = useAppState((s) => s.ui.showWeeklyObjectives);
   const today = todayISO();
+  const elapsedCutoffISO = lastFullyElapsedDateISO();
   const { monthKeys, activeMonthKey, expandedMonths, expandedWeekKeys, allExpanded, goToMonth, goToWeek, goToDay, goRelativeMonth, toggleMonth, toggleWeek, toggleAll } =
     navigation;
 
@@ -571,7 +573,7 @@ export default function PlanView({
       const days = daysForWeekInMonth(ws, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek);
       monthDays.push(...days);
     }
-    return elapsedProgress(monthDays, outcome.id, daily, today);
+    return elapsedProgress(monthDays, outcome.id, daily, elapsedCutoffISO);
   }
 
   return (
@@ -760,7 +762,7 @@ export default function PlanView({
                           const expandedWeek = expandedWeekKeys.has(`${monthKey}:${weekStartISO}`);
                           const expandedWeekKey = `${monthKey}:${weekStartISO}`;
 
-                          const { done: doneDays, total: elapsedWeekDays } = elapsedProgress(weekDays, outcome.id, daily, today);
+                          const { done: doneDays, total: elapsedWeekDays } = elapsedProgress(weekDays, outcome.id, daily, elapsedCutoffISO);
                           const weekTone = elapsedWeekDays ? trafficLightToneFromProgress(doneDays / elapsedWeekDays) : null;
 
                           return (

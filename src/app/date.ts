@@ -59,6 +59,10 @@ export function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+export function lastFullyElapsedDateISO(now = new Date()): string {
+  return dayNumberToISO(isoToDayNumber(toISODate(now)) - 1);
+}
+
 export function addDays(d: Date, days: number): Date {
   const copy = new Date(d);
   copy.setDate(copy.getDate() + days);

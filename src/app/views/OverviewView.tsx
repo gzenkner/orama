@@ -8,6 +8,7 @@ import {
   formatShortDate,
   formatWeekLabel,
   isoToDayNumber,
+  lastFullyElapsedDateISO,
   monthKeyFromDate,
   parseISODate,
   startOfWeek,
@@ -45,7 +46,7 @@ function pluralize(count: number, singular: string, plural = `${singular}s`): st
 
 function streakInfo(outcome: Outcome, daily: Record<string, DailyGoal>): { current: number; best: number } {
   const activeDates = dateISOsInRange(outcome.startDate, outcome.endDate, outcome.daysOfWeek);
-  const until = Math.min(isoToDayNumber(toISODate(new Date())), isoToDayNumber(outcome.endDate));
+  const until = Math.min(isoToDayNumber(lastFullyElapsedDateISO()), isoToDayNumber(outcome.endDate));
 
   let current = 0;
   for (const dateISO of [...activeDates].reverse()) {
@@ -196,6 +197,8 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
 
   const todayISO = toISODate(new Date());
   const todayDayNumber = isoToDayNumber(todayISO);
+  const lastElapsedISO = lastFullyElapsedDateISO();
+  const lastElapsedDayNumber = isoToDayNumber(lastElapsedISO);
   const startDayNumber = isoToDayNumber(outcome.startDate);
   const endDayNumber = isoToDayNumber(outcome.endDate);
 
@@ -209,8 +212,8 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
   const hasActiveDays = activeDates.length > 0;
 
   const elapsedDates = React.useMemo(
-    () => activeDates.filter((dateISO) => isoToDayNumber(dateISO) <= Math.min(todayDayNumber, endDayNumber)),
-    [activeDates, endDayNumber, todayDayNumber]
+    () => activeDates.filter((dateISO) => isoToDayNumber(dateISO) <= Math.min(lastElapsedDayNumber, endDayNumber)),
+    [activeDates, endDayNumber, lastElapsedDayNumber]
   );
   const upcomingDates = React.useMemo(
     () => activeDates.filter((dateISO) => isoToDayNumber(dateISO) >= todayDayNumber),
@@ -255,12 +258,12 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
   const weekTitle = weekly[`${outcome.id}:${focusMonthKey}:${focusWeekStartISO}`]?.title ?? "";
 
   const monthDates = activeDates.filter((dateISO) => monthKeyFromDate(parseISODate(dateISO)) === focusMonthKey);
-  const monthProgress = progressSnapshot(monthDates, outcome.id, daily, todayISO);
+  const monthProgress = progressSnapshot(monthDates, outcome.id, daily, lastElapsedISO);
   const weekDates = activeDates.filter((dateISO) => {
     const dayNumber = isoToDayNumber(dateISO);
     return dayNumber >= focusWeekStartDayNumber && dayNumber < focusWeekStartDayNumber + 7;
   });
-  const weekProgress = progressSnapshot(weekDates, outcome.id, daily, todayISO);
+  const weekProgress = progressSnapshot(weekDates, outcome.id, daily, lastElapsedISO);
 
   const consistencyStripDates = phase === "upcoming" ? activeDates.slice(0, 7) : elapsedDates.slice(-7);
   const rhythmDates = phase === "upcoming" ? activeDates.slice(0, 7) : elapsedDates.slice(-7);
