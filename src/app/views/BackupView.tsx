@@ -1,6 +1,7 @@
 import React from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { actions, useAppState } from "../store";
+import { syncRemoteStateNow } from "../remoteStateSync";
 import Button from "../ui/Button";
 import Card from "../ui/Card";
 import Textarea from "../ui/Textarea";
@@ -30,6 +31,21 @@ export default function BackupView() {
   const [backupStatus, setBackupStatus] = React.useState<string | null>(null);
   const [backingUp, setBackingUp] = React.useState(false);
   const exportRaw = React.useMemo(() => buildBackupExport(state), [state]);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  async function applyImportedState(raw: string) {
+    setError(null);
+    setBackupStatus(null);
+
+    try {
+      actions.importJSON(raw);
+      setImportRaw("");
+      await syncRemoteStateNow();
+      setBackupStatus("JSON imported and synced to Supabase.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Import failed.");
+    }
+  }
 
   return (
     <div className="grid gap-4">
@@ -96,30 +112,39 @@ export default function BackupView() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="app-kicker">Import</div>
-            <div className="mt-2 text-sm leading-6 app-muted">Paste a previous JSON export to restore the workspace.</div>
+            <div className="mt-2 text-sm leading-6 app-muted">Upload or paste a previous JSON export to replace the workspace and sync it to Supabase.</div>
           </div>
 
-          <Button
-            variant="primary"
-            onClick={() => {
-              setError(null);
-              try {
-                actions.importJSON(importRaw);
-                setImportRaw("");
-              } catch (e) {
-                setError(e instanceof Error ? e.message : "Import failed.");
-              }
-            }}
-            disabled={!importRaw.trim()}
-          >
-            Import
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (!file) return;
+                try {
+                  const raw = await file.text();
+                  await applyImportedState(raw);
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Could not read the JSON file.");
+                }
+              }}
+            />
+            <Button onClick={() => fileInputRef.current?.click()}>Upload JSON</Button>
+            <Button variant="primary" onClick={() => void applyImportedState(importRaw)} disabled={!importRaw.trim()}>
+              Import
+            </Button>
+          </div>
         </div>
 
         <div className="mt-3">
           <Textarea value={importRaw} onChange={(e) => setImportRaw(e.target.value)} placeholder="{ ... }" className="min-h-64 font-mono text-xs" />
         </div>
 
+        {backupStatus ? <div className="mt-3 text-sm app-muted">{backupStatus}</div> : null}
         {error ? <div className="mt-3 text-sm text-red-500">{error}</div> : null}
       </Card>
     </div>

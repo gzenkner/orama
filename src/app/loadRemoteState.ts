@@ -1,60 +1,24 @@
+import { getRemoteSyncContext } from "./portalBridge";
 import { actions } from "./store";
 
-type ParentWindowWithPortal = Window &
-  typeof globalThis & {
-    MARKETSTATE_CONFIG?: {
-      SUPABASE_URL?: string;
-      SUPABASE_ANON_KEY?: string;
-    };
-    marketstateSupabase?: {
-      auth: {
-        getSession: () => Promise<{
-          data?: {
-            session?: {
-              access_token?: string;
-            } | null;
-          };
-        }>;
-      };
-    };
-  };
+export type RemoteLoadPhase = "connecting" | "fetching";
 
-function getPortalWindow(): ParentWindowWithPortal | null {
-  if (typeof window === "undefined") return null;
-  try {
-    if (window.parent && window.parent !== window) {
-      return window.parent as ParentWindowWithPortal;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-export async function loadRemoteStateIntoStore(): Promise<void> {
-  const portalWindow = getPortalWindow();
-  const config = portalWindow?.MARKETSTATE_CONFIG;
-  const client = portalWindow?.marketstateSupabase;
-
-  if (!portalWindow || !config?.SUPABASE_URL || !config.SUPABASE_ANON_KEY || !client) {
+export async function loadRemoteStateIntoStore(onPhaseChange?: (phase: RemoteLoadPhase) => void): Promise<void> {
+  onPhaseChange?.("connecting");
+  const context = await getRemoteSyncContext();
+  if (!context) {
     return;
   }
 
-  const { data } = await client.auth.getSession();
-  const accessToken = data?.session?.access_token;
-
-  if (!accessToken) {
-    return;
-  }
-
+  onPhaseChange?.("fetching");
   const response = await fetch(
-    `${config.SUPABASE_URL.replace(/\/$/, "")}/functions/v1/orama-state`,
+    `${context.supabaseUrl.replace(/\/$/, "")}/functions/v1/orama-state`,
     {
       method: "GET",
       headers: {
         Accept: "application/json",
-        Authorization: `Bearer ${accessToken}`,
-        apikey: config.SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${context.accessToken}`,
+        apikey: context.supabaseAnonKey,
       },
     },
   );

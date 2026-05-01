@@ -9,6 +9,7 @@ import {
   monthKeysInRange,
   normalizeDaysOfWeek,
   parseISODate,
+  startOfWeek,
   toISODate
 } from "./date";
 import { OUTCOME_THEME_ORDER, getOutcomeTheme, getOutcomeThemeStyle } from "./theme";
@@ -346,6 +347,7 @@ function OutcomeList({ onSelect }: { onSelect?: () => void }) {
           return (
             <div
               key={outcome.id}
+              style={getOutcomeThemeStyle(outcome.themeId)}
               className={cn(
                 "rounded-[0.75rem] transition",
                 showDropBefore && "border-t-2 border-[color:var(--app-text)] pt-1.5",
@@ -370,7 +372,7 @@ function OutcomeList({ onSelect }: { onSelect?: () => void }) {
                   draggedOutcomeId === outcome.id && "opacity-55",
                   active
                     ? "app-nav-active"
-                    : "border-[color:var(--app-border)] bg-[color:var(--app-card)] hover:bg-[color:var(--app-nav-hover)]"
+                    : "border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] hover:bg-[color:var(--outcome-soft)]"
                 )}
                 onDragStart={(e) => {
                   setDraggedOutcomeId(outcome.id);
@@ -386,7 +388,7 @@ function OutcomeList({ onSelect }: { onSelect?: () => void }) {
                 title="Drag to reorder outcomes"
               >
                 <div className="flex items-center gap-3">
-                  <span className="inline-flex h-3.5 w-3.5 shrink-0 rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-elevated)]" />
+                  <span className="inline-flex h-3.5 w-3.5 shrink-0 rounded-full border border-[color:var(--outcome-border)] bg-[color:var(--outcome-accent)]" />
                   <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">{outcome.title}</div>
                   <div className="shrink-0 text-[8px] uppercase tracking-[0.18em] app-muted">Drag</div>
                 </div>
@@ -510,14 +512,15 @@ function CollapsedSidebar({ onShow }: { onShow: () => void }) {
               title={outcome.title}
               aria-label={`Open ${outcome.title}`}
               onClick={() => actions.openOverview("outcome", outcome.id)}
+              style={getOutcomeThemeStyle(outcome.themeId)}
               className={cn(
                 "flex h-10 w-10 items-center justify-center rounded-full border transition",
                 active
-                  ? "border-[color:var(--app-text)] bg-[color:var(--app-card)] shadow-[0_6px_16px_rgba(74,53,41,0.08)]"
-                  : "border-transparent bg-transparent hover:border-[color:var(--app-border)] hover:bg-[color:var(--app-nav-hover)]"
+                  ? "border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] shadow-[0_6px_16px_var(--outcome-glow)]"
+                  : "border-transparent bg-transparent hover:border-[color:var(--outcome-border)] hover:bg-[color:var(--outcome-soft)]"
               )}
             >
-              <span className="block h-3.5 w-3.5 rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-elevated)]" />
+              <span className="block h-3.5 w-3.5 rounded-full border border-[color:var(--outcome-border)] bg-[color:var(--outcome-accent)]" />
             </button>
           );
         })}
@@ -845,6 +848,7 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
   const months = outcome ? monthKeysInRange(outcome.startDate, outcome.endDate) : [];
   const hasNotes = outcome ? outcome.notes.trim().length > 0 : false;
   const showOutcomeHeader = Boolean(outcome && (tab === "plan" || tab === "calendar" || (tab === "overview" && overviewScope === "outcome")));
+  const compactPlanChrome = tab === "plan";
 
   function runPlanJump(jump: () => void) {
     if (tab === "plan") {
@@ -875,16 +879,19 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
       {showOutcomeHeader && outcome ? (
-        <div className="border-b border-[color:var(--app-border)] p-4 sm:p-6">
-          <div className="app-card-soft rounded-[0.95rem] p-3 sm:p-4">
-            <div className="flex flex-col gap-3">
+        <div className={compactPlanChrome ? "border-b border-[color:var(--app-border)] p-3 sm:p-4" : "border-b border-[color:var(--app-border)] p-4 sm:p-6"}>
+          <div className={compactPlanChrome ? "app-card-soft rounded-[0.9rem] p-2.5 sm:p-3" : "app-card-soft rounded-[0.95rem] p-3 sm:p-4"}>
+            <div className={compactPlanChrome ? "flex flex-col gap-2" : "flex flex-col gap-3"}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <OutcomeBadge outcome={outcome} />
-                  <span className="app-pill rounded-[0.55rem] px-3 py-1 text-xs font-semibold">
+                  <span className={compactPlanChrome ? "app-pill rounded-[0.5rem] px-2.5 py-1 text-[11px] font-semibold" : "app-pill rounded-[0.55rem] px-3 py-1 text-xs font-semibold"}>
                     {months.length} month{months.length === 1 ? "" : "s"}
                   </span>
-                  <span className="app-pill rounded-[0.55rem] px-3 py-1 text-xs font-semibold" title="Active days">
+                  <span
+                    className={compactPlanChrome ? "app-pill rounded-[0.5rem] px-2.5 py-1 text-[11px] font-semibold" : "app-pill rounded-[0.55rem] px-3 py-1 text-xs font-semibold"}
+                    title="Active days"
+                  >
                     {formatDaysOfWeek(outcome.daysOfWeek)}
                   </span>
                 </div>
@@ -917,8 +924,10 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
               </div>
 
               <div className="min-w-0">
-                <div className="font-display text-[1.55rem] font-semibold leading-tight sm:text-[1.9rem]">{outcome.title}</div>
-                <div className="mt-1.5 text-sm app-muted">
+                <div className={compactPlanChrome ? "font-display text-[1.2rem] font-semibold leading-tight sm:text-[1.45rem]" : "font-display text-[1.55rem] font-semibold leading-tight sm:text-[1.9rem]"}>
+                  {outcome.title}
+                </div>
+                <div className={compactPlanChrome ? "mt-1 text-xs app-muted" : "mt-1.5 text-sm app-muted"}>
                   {formatShortDate(outcome.startDate)} - {formatShortDate(outcome.endDate)}
                 </div>
               </div>
@@ -959,9 +968,25 @@ function Main({ onNewOutcome }: { onNewOutcome: () => void }) {
         </div>
       ) : null}
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
+      <div
+        ref={scrollRef}
+        className={compactPlanChrome ? "min-h-0 flex-1 overflow-auto px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3" : "min-h-0 flex-1 overflow-auto p-4 sm:p-6"}
+      >
         {tab === "overview" && overviewScope === "global" ? <OverviewLandingView /> : null}
-        {tab === "overview" && overviewScope === "outcome" && outcome ? <OverviewView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
+        {tab === "overview" && overviewScope === "outcome" && outcome ? (
+          <OverviewView
+            outcome={outcome}
+            weekStartsOn={weekStartsOn}
+            onOpenPlanMonth={(monthKey) => runPlanJump(() => planNavigation.goToMonth(monthKey))}
+            onOpenPlanWeek={(monthKey, weekStartISO) => runPlanJump(() => planNavigation.goToWeek(monthKey, weekStartISO))}
+            onOpenPlanDay={(dateISO) => {
+              const date = parseISODate(dateISO);
+              const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+              const weekStartISO = toISODate(startOfWeek(date, weekStartsOn));
+              runPlanJump(() => planNavigation.goToDay(monthKey, weekStartISO, dateISO));
+            }}
+          />
+        ) : null}
         {tab === "assistant" && outcome ? <PlanningAssistantView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
         {tab === "plan" && outcome ? <PlanView outcome={outcome} weekStartsOn={weekStartsOn} navigation={planNavigation} /> : null}
         {tab === "calendar" && outcome ? <CalendarView outcome={outcome} weekStartsOn={weekStartsOn} /> : null}
@@ -1018,13 +1043,17 @@ export default function App() {
   const [sidebarHidden, setSidebarHidden] = React.useState(false);
   const outcomes = useAppState((s) => s.outcomes);
   const selectedOutcomeId = useAppState((s) => s.selectedOutcomeId);
-  const themeMode = useAppState((s) => s.ui.themeMode);
+  const activeTab = useAppState((s) => s.ui.activeTab);
+  const overviewScope = useAppState((s) => s.ui.overviewScope);
 
   const selectedOutcome = outcomes.find((outcome) => outcome.id === selectedOutcomeId);
-  const themeId = selectedOutcome?.themeId ?? OUTCOME_THEME_ORDER[0];
+  const shouldTintWorkspace =
+    Boolean(selectedOutcome) &&
+    (activeTab === "assistant" || activeTab === "plan" || activeTab === "calendar" || (activeTab === "overview" && overviewScope === "outcome"));
+  const themeStyle = shouldTintWorkspace && selectedOutcome ? getOutcomeThemeStyle(selectedOutcome.themeId) : undefined;
 
   return (
-    <div className="app-shell h-full w-full" data-app-theme="white" style={getOutcomeThemeStyle(themeId)}>
+    <div className="app-shell h-full w-full" data-app-theme="white" style={themeStyle}>
       <div
         className={cn(
           "relative grid h-full w-full grid-cols-1 gap-0 p-0",

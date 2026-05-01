@@ -28,6 +28,7 @@ import {
   type DayVisualState,
   type TrafficLightTone
 } from "../ui/trafficLight";
+import { getOutcomeThemeStyle } from "../theme";
 
 type OverviewPhase = "upcoming" | "active" | "ended";
 
@@ -88,29 +89,34 @@ function MiniDayCell({
   dateISO,
   state,
   highlight = false,
-  className
+  className,
+  onClick
 }: {
   dateISO: string;
   state: DayVisualState;
   highlight?: boolean;
   className?: string;
+  onClick?: () => void;
 }) {
   const weekday = parseISODate(dateISO).toLocaleDateString(undefined, { weekday: "short" }).slice(0, 1);
   const day = parseISODate(dateISO).toLocaleDateString(undefined, { day: "numeric" });
+  const Component = onClick ? "button" : "div";
 
   return (
-    <div
+    <Component
+      {...(onClick ? { type: "button", onClick } : {})}
       title={formatShortDate(dateISO)}
       className={cn(
         "flex h-12 w-10 flex-col items-center justify-center rounded-[0.6rem] border text-xs",
         toneClasses(state),
         highlight ? "shadow-[inset_0_0_0_1px_var(--app-text)]" : "",
+        onClick ? "cursor-pointer transition hover:-translate-y-[1px] hover:shadow-[0_8px_18px_var(--app-shadow)]" : "",
         className
       )}
     >
       <div className="text-[10px] font-semibold uppercase tracking-[0.12em] opacity-70">{weekday}</div>
       <div className="mt-0.5 text-sm font-semibold leading-none">{day}</div>
-    </div>
+    </Component>
   );
 }
 
@@ -120,6 +126,34 @@ function MetricPill({ label, value }: { label: string; value: string }) {
       <div className="text-[10px] font-semibold uppercase tracking-[0.16em] app-subtle">{label}</div>
       <div className="mt-1 text-sm font-semibold">{value}</div>
     </div>
+  );
+}
+
+function PlanLaunchMark() {
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden="true" className="h-6 w-6">
+      <defs>
+        <linearGradient id="plan-launch-gradient" x1="8" y1="6" x2="40" y2="42" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="var(--outcome-ink)" stopOpacity="0.96" />
+          <stop offset="1" stopColor="var(--outcome-accent-strong)" />
+        </linearGradient>
+      </defs>
+      <rect x="9" y="8" width="30" height="32" rx="10" fill="url(#plan-launch-gradient)" opacity="0.12" />
+      <path
+        d="M17 16.5h8.5M17 23.5h14M17 30.5h10"
+        stroke="url(#plan-launch-gradient)"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+      />
+      <path
+        d="M30.5 15.5l2.8 2.8 5.2-5.3M27.5 29.5l2.6 2.6 4.9-5"
+        fill="none"
+        stroke="url(#plan-launch-gradient)"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
@@ -170,27 +204,49 @@ function ProgressRing({
 function DateRow({
   dateISO,
   state,
-  rightLabel
+  rightLabel,
+  onClick
 }: {
   dateISO: string;
   state: DayVisualState;
   rightLabel: string;
+  onClick?: () => void;
 }) {
   const weekday = parseISODate(dateISO).toLocaleDateString(undefined, { weekday: "short" });
   const shortDate = parseISODate(dateISO).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const Component = onClick ? "button" : "div";
 
   return (
-    <div className={cn("flex items-center justify-between gap-3 rounded-[0.7rem] border px-3 py-3", toneClasses(state))}>
+    <Component
+      {...(onClick ? { type: "button", onClick } : {})}
+      className={cn(
+        "flex items-center justify-between gap-3 rounded-[0.7rem] border px-3 py-3 text-left",
+        toneClasses(state),
+        onClick ? "cursor-pointer transition hover:-translate-y-[1px] hover:shadow-[0_10px_22px_var(--app-shadow)]" : ""
+      )}
+    >
       <div className="min-w-0">
         <div className="text-[11px] font-semibold uppercase tracking-[0.16em] opacity-70">{weekday}</div>
         <div className="mt-1 text-sm font-semibold">{shortDate}</div>
       </div>
       <div className="text-[11px] font-semibold uppercase tracking-[0.16em] opacity-75">{rightLabel}</div>
-    </div>
+    </Component>
   );
 }
 
-export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outcome; weekStartsOn: WeekStartsOn }) {
+export default function OverviewView({
+  outcome,
+  weekStartsOn,
+  onOpenPlanMonth,
+  onOpenPlanWeek,
+  onOpenPlanDay
+}: {
+  outcome: Outcome;
+  weekStartsOn: WeekStartsOn;
+  onOpenPlanMonth?: (monthKey: string) => void;
+  onOpenPlanWeek?: (monthKey: string, weekStartISO: string) => void;
+  onOpenPlanDay?: (dateISO: string) => void;
+}) {
   const monthly = useAppState((s) => s.monthly);
   const weekly = useAppState((s) => s.weekly);
   const daily = useAppState((s) => s.daily);
@@ -248,6 +304,7 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
   const boardIntentionalRest = Boolean(boardEntry?.intentionalRest);
   const boardHasCommitment = boardHasTasks || boardIntentionalRest;
   const boardNeedsAcknowledgement = boardDateISO === todayISO && phase === "active" && !boardHasTasks;
+  const canToggleIntentionalRest = boardDateISO === todayISO && phase === "active";
 
   const focusDate = parseISODate(boardDateISO);
   const focusMonthKey = monthKeyFromDate(focusDate);
@@ -313,7 +370,7 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
   const ringTone = phase === "upcoming" ? "amber" : trafficLightToneFromProgress(ringValue);
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-4" style={getOutcomeThemeStyle(outcome.themeId)}>
       <Card className="app-card-soft rounded-[0.95rem] p-5 sm:p-6">
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_280px]">
           <div>
@@ -327,11 +384,72 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
                 <div className="mt-2 max-w-2xl text-sm leading-6 app-muted">{boardIntro}</div>
               </div>
 
-              {hasActiveDays ? (
-                <div className={cn("rounded-[0.65rem] border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em]", toneClasses(boardState))}>
-                  {boardDateISO === todayISO && phase === "active" ? "Today" : formatShortDate(boardDateISO)}
-                </div>
-              ) : null}
+              <div className="grid gap-2 sm:justify-items-end">
+                <button
+                  type="button"
+                  onClick={() => actions.setActiveTab("plan")}
+                  className="group flex min-w-[220px] w-full max-w-[320px] items-center gap-3 rounded-[0.95rem] border border-[color:var(--outcome-border)] bg-[color:var(--app-card)] px-4 py-3 text-left shadow-[0_16px_32px_var(--outcome-glow)] transition hover:-translate-y-[1px] hover:bg-[color:var(--outcome-soft)]"
+                  title="Open the plan workspace"
+                >
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[0.9rem] border border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] text-[color:var(--outcome-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
+                    <PlanLaunchMark />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[0.7rem] font-semibold uppercase tracking-[0.18em] app-subtle">Plan</span>
+                    <span className="mt-1 block text-[1rem] font-semibold leading-tight text-[color:var(--outcome-ink)]">Open plan</span>
+                    <span className="mt-1 block text-xs leading-5 app-muted">Map the month, week, and day targets.</span>
+                  </span>
+                </button>
+
+                {hasActiveDays ? (
+                  <div className="grid w-full min-w-[220px] max-w-[320px] gap-2">
+                    <Button
+                      variant={boardEntry?.done ? "secondary" : "primary"}
+                      className="w-full justify-start px-4 text-left"
+                      onClick={() => actions.toggleDailyDone(outcome.id, boardDateISO)}
+                      disabled={boardDateISO === todayISO && phase === "active" && !boardHasCommitment}
+                      title={
+                        boardDateISO === todayISO && phase === "active" && !boardHasCommitment
+                          ? "Add a task or acknowledge an intentional rest day first"
+                          : undefined
+                      }
+                    >
+                      {boardEntry?.done ? "Mark not done" : boardDateISO === todayISO && phase === "active" ? "Mark today done" : "Mark day done"}
+                    </Button>
+
+                    <button
+                      type="button"
+                      className={cn(
+                        "inline-flex h-10 w-full items-center gap-2 rounded-[0.55rem] border px-4 text-left text-[13px] font-semibold transition focus:outline-none",
+                        boardIntentionalRest
+                          ? "app-tab app-tab-active"
+                          : "border-[color:var(--app-border)] bg-[color:var(--app-card)] hover:bg-[color:var(--app-nav-hover)]",
+                        !canToggleIntentionalRest ? "cursor-not-allowed opacity-55" : ""
+                      )}
+                      aria-pressed={boardIntentionalRest}
+                      disabled={!canToggleIntentionalRest}
+                      title={canToggleIntentionalRest ? "Mark today as an intentional rest day" : "Intentional rest is only available for today"}
+                      onClick={() => actions.setDailyIntentionalRest(outcome.id, boardDateISO, !boardIntentionalRest)}
+                    >
+                      <span
+                        className={cn(
+                          "inline-flex h-4 w-4 items-center justify-center rounded-[0.3rem] border text-[11px]",
+                          boardIntentionalRest ? "border-current" : "border-[color:var(--app-border)]"
+                        )}
+                      >
+                        {boardIntentionalRest ? "x" : ""}
+                      </span>
+                      <span className="truncate">Intentional rest today</span>
+                    </button>
+                  </div>
+                ) : null}
+
+                {hasActiveDays ? (
+                  <div className={cn("justify-self-start rounded-[0.65rem] border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] sm:justify-self-end", toneClasses(boardState))}>
+                    {boardDateISO === todayISO && phase === "active" ? "Today" : formatShortDate(boardDateISO)}
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -398,54 +516,10 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
                 </div>
 
                 {boardNeedsAcknowledgement ? (
-                  <div className="mt-4 rounded-[0.75rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] p-4">
-                    <div className="text-sm font-semibold">
-                      {boardIntentionalRest ? "You have intentionally left today empty." : "Today is still empty."}
-                    </div>
-                    <div className="mt-2 text-sm leading-6 app-muted">
-                      Add at least one task for today, or explicitly acknowledge that you are intentionally not doing anything for this outcome today.
-                    </div>
-                    <button
-                      type="button"
-                      className={cn(
-                        "mt-3 inline-flex items-center gap-2 rounded-[0.65rem] border px-3 py-2 text-sm font-semibold transition",
-                        boardIntentionalRest
-                          ? "app-tab app-tab-active"
-                          : "border-[color:var(--app-border)] bg-[color:var(--app-card)] hover:bg-[color:var(--app-nav-hover)]"
-                      )}
-                      aria-pressed={boardIntentionalRest}
-                      onClick={() => actions.setDailyIntentionalRest(outcome.id, boardDateISO, !boardIntentionalRest)}
-                    >
-                      <span
-                        className={cn(
-                          "inline-flex h-4 w-4 items-center justify-center rounded-[0.3rem] border text-[11px]",
-                          boardIntentionalRest ? "border-current" : "border-[color:var(--app-border)]"
-                        )}
-                      >
-                        {boardIntentionalRest ? "x" : ""}
-                      </span>
-                      I am intentionally not doing anything for this outcome today
-                    </button>
+                  <div className="mt-4 rounded-[0.75rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-4 py-3 text-sm leading-6 app-muted">
+                    Add a task for today or use the intentional rest action.
                   </div>
                 ) : null}
-
-                <div className="mt-5 flex flex-wrap items-center gap-2">
-                  <Button
-                    variant={boardEntry?.done ? "secondary" : "primary"}
-                    onClick={() => actions.toggleDailyDone(outcome.id, boardDateISO)}
-                    disabled={boardDateISO === todayISO && phase === "active" && !boardHasCommitment}
-                    title={
-                      boardDateISO === todayISO && phase === "active" && !boardHasCommitment
-                        ? "Add a task or acknowledge an intentional rest day first"
-                        : undefined
-                    }
-                  >
-                    {boardEntry?.done ? "Mark not done" : boardDateISO === todayISO && phase === "active" ? "Mark today done" : "Mark day done"}
-                  </Button>
-                  <Button size="sm" onClick={() => actions.setActiveTab("plan")}>
-                    Open plan
-                  </Button>
-                </div>
               </>
             ) : (
               <div className="mt-4 rounded-[0.7rem] border border-dashed border-[color:var(--app-border)] px-4 py-5 text-sm leading-6 app-muted">
@@ -495,12 +569,17 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
-        <Card className="rounded-[0.85rem] p-5">
+        <Card className="app-card-soft rounded-[0.85rem] p-5">
           <div className="app-kicker">Current focus</div>
           <div className="mt-2 text-base font-semibold">The month and week should make the next active day feel obvious.</div>
 
           <div className="mt-4 grid gap-3">
-            <div className="rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] p-4">
+            <button
+              type="button"
+              className="rounded-[0.7rem] border border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] p-4 text-left transition hover:-translate-y-[1px] hover:shadow-[0_12px_24px_var(--outcome-glow)]"
+              onClick={() => onOpenPlanMonth?.(focusMonthKey)}
+              title="Open this month in the plan"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="app-kicker">Month</div>
@@ -512,9 +591,14 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
               <div className="mt-3">
                 <Progress value={monthProgress.total ? monthProgress.done / monthProgress.total : 0} tone={monthProgress.total ? undefined : "amber"} />
               </div>
-            </div>
+            </button>
 
-            <div className="rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] p-4">
+            <button
+              type="button"
+              className="rounded-[0.7rem] border border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] p-4 text-left transition hover:-translate-y-[1px] hover:shadow-[0_12px_24px_var(--outcome-glow)]"
+              onClick={() => onOpenPlanWeek?.(focusMonthKey, focusWeekStartISO)}
+              title="Open this week in the plan"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="app-kicker">Week</div>
@@ -526,17 +610,12 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
               <div className="mt-3">
                 <Progress value={weekProgress.total ? weekProgress.done / weekProgress.total : 0} tone={weekProgress.total ? undefined : "amber"} />
               </div>
-            </div>
+            </button>
           </div>
 
-          <div className="mt-4">
-            <Button size="sm" onClick={() => actions.setActiveTab("plan")}>
-              Refine plan
-            </Button>
-          </div>
         </Card>
 
-        <Card className="rounded-[0.85rem] p-5">
+        <Card className="app-card-soft rounded-[0.85rem] p-5">
           <div className="app-kicker">Rhythm</div>
           <div className="mt-2 text-base font-semibold">
             {phase === "upcoming" ? "The first few active days set the tone." : "A compact read on the days shaping momentum."}
@@ -550,6 +629,7 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
                   dateISO={dateISO}
                   state={dayVisualState(daily[`${outcome.id}:${dateISO}`], dateISO, todayISO)}
                   highlight={dateISO === todayISO}
+                  onClick={() => onOpenPlanDay?.(dateISO)}
                 />
               ))}
             </div>
@@ -571,6 +651,7 @@ export default function OverviewView({ outcome, weekStartsOn }: { outcome: Outco
                     key={dateISO}
                     dateISO={dateISO}
                     state={nextState}
+                    onClick={() => onOpenPlanDay?.(dateISO)}
                     rightLabel={
                       dateISO === todayISO
                         ? "Today"

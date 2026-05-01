@@ -577,17 +577,18 @@ export default function PlanView({
   }
 
   return (
-    <div className="grid gap-4">
-      <Card className="app-card-soft rounded-[0.95rem] p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+    <div className="grid gap-3">
+      <Card className="app-card-soft rounded-[0.9rem] p-3 sm:p-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
             <div className="app-kicker">Plan</div>
-            <div className="font-display mt-2 text-lg font-semibold">Fill the plan top-down: outcome to month to week to day.</div>
-            <div className="mt-2 text-sm leading-6 app-muted">
-              The view now stays easier to scan: use the month strip, the timeline, or the open cards below to move around.
+            <div className="font-display mt-1.5 text-base font-semibold sm:text-[1.05rem]">Outcome to month to week to day.</div>
+            <div className="mt-1 text-xs leading-5 app-muted sm:text-sm">
+              Use the month strip and the open cards below to move quickly.
             </div>
-            <div className="mt-2 text-xs app-muted">Active days: {formatDaysOfWeek(outcome.daysOfWeek)}</div>
+            <div className="mt-1 text-[11px] app-muted">Active days: {formatDaysOfWeek(outcome.daysOfWeek)}</div>
           </div>
+
           <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
@@ -624,9 +625,6 @@ export default function PlanView({
             >
               Jump to today
             </Button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               variant="ghost"
@@ -655,7 +653,7 @@ export default function PlanView({
           </div>
         </div>
 
-        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {monthKeys.map((monthKey) => {
             const active = activeMonthKey === monthKey;
             const { done, total } = monthProgress(monthKey);
@@ -665,7 +663,7 @@ export default function PlanView({
                 key={monthKey}
                 type="button"
                 className={[
-                  "shrink-0 rounded-[0.6rem] border px-3 py-2 text-left text-sm transition",
+                  "shrink-0 rounded-[0.6rem] border px-3 py-1.5 text-left text-sm transition",
                   tone ? trafficLightSurfaceClass(tone) : daySurfaceClass("future"),
                   active ? "outline outline-1 outline-[color:var(--app-text)]" : "opacity-85 hover:opacity-100"
                 ].join(" ")}

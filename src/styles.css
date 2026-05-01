@@ -96,6 +96,35 @@
     content: none;
   }
 
+  .app-boot-shell {
+    display: grid;
+    min-height: 100%;
+    place-items: center;
+    padding: 1.5rem;
+    background: transparent;
+  }
+
+  .app-boot-spinner {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 999px;
+    border: 3px solid rgba(92, 76, 62, 0.14);
+    border-top-color: var(--outcome-accent-strong);
+    animation: app-boot-spin 0.8s linear infinite;
+  }
+
+  @keyframes app-boot-spin {
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .app-boot-spinner {
+      animation: none;
+    }
+  }
+
   .app-shell[data-app-theme="white"] {
     color-scheme: light;
     --app-bg: #f7f2eb;

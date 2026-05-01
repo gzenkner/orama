@@ -7,6 +7,7 @@ import Card from "../ui/Card";
 import Input from "../ui/Input";
 import Progress from "../ui/Progress";
 import { cn } from "../ui/cn";
+import { getOutcomeThemeStyle } from "../theme";
 import { trafficLightSurfaceClass, trafficLightToneFromProgress, trafficLightVar, type TrafficLightTone } from "../ui/trafficLight";
 
 type OutcomePhase = "upcoming" | "active" | "ended";
@@ -278,7 +279,7 @@ export default function OverviewLandingView() {
 
   return (
     <div className="grid gap-4">
-      <Card className="app-card-soft rounded-[0.95rem] p-5 sm:p-6">
+      <Card className="rounded-[0.95rem] p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="app-kicker">Today</div>
@@ -300,15 +301,22 @@ export default function OverviewLandingView() {
               return (
                 <div
                   key={summary.outcome.id}
-                  className="rounded-[0.8rem] border border-[color:var(--app-border)] bg-[color:var(--app-card)] p-3"
+                  style={getOutcomeThemeStyle(summary.outcome.themeId)}
+                  className="rounded-[0.8rem] border border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] p-3"
                 >
                   <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex h-3 w-3 rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-elevated)]" />
-                        <div className="truncate text-sm font-semibold">{summary.outcome.title}</div>
+                        <span className="inline-flex h-3 w-3 rounded-full border border-[color:var(--outcome-border)] bg-[color:var(--outcome-accent)]" />
+                        <button
+                          type="button"
+                          className="truncate text-left text-sm font-semibold transition hover:opacity-75"
+                          onClick={() => actions.openOverview("outcome", summary.outcome.id)}
+                        >
+                          {summary.outcome.title}
+                        </button>
                         <span
-                          className="rounded-[0.45rem] border border-[color:var(--app-border)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
+                          className="rounded-[0.45rem] border border-[color:var(--outcome-border)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
                         >
                           {formatDaysOfWeek(summary.outcome.daysOfWeek)}
                         </span>
@@ -335,7 +343,10 @@ export default function OverviewLandingView() {
                                 value={title}
                                 onChange={(e) => actions.setDailyItem(summary.outcome.id, todayISO, index, e.target.value)}
                                 placeholder={index === 0 ? "What needs to happen today?" : "Another task..."}
-                                className={cn("h-9 flex-1 rounded-[0.5rem] px-3 text-[13px]", itemDone ? "line-through opacity-70" : "")}
+                                className={cn(
+                                  "h-9 flex-1 rounded-[0.5rem] border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] px-3 text-[13px] text-[color:var(--outcome-ink)]",
+                                  itemDone ? "line-through opacity-70" : ""
+                                )}
                               />
                               <button
                                 type="button"
@@ -359,36 +370,14 @@ export default function OverviewLandingView() {
                         </div>
                       </div>
 
-                      {!hasTasks ? (
-                        <div className="mt-2 rounded-[0.65rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-3 py-2 text-[color:var(--app-text)]">
-                          <button
-                            type="button"
-                            className={cn(
-                              "inline-flex items-center gap-2 rounded-[0.55rem] border px-2.5 py-1.5 text-left text-xs font-semibold transition",
-                              intentionalRest
-                                ? "app-tab app-tab-active"
-                                : "border-[color:var(--app-border)] bg-[color:var(--app-card)] hover:bg-[color:var(--app-nav-hover)]"
-                            )}
-                            aria-pressed={intentionalRest}
-                            onClick={() => actions.setDailyIntentionalRest(summary.outcome.id, todayISO, !intentionalRest)}
-                          >
-                            <span
-                              className={cn(
-                                "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[0.3rem] border text-[11px]",
-                                intentionalRest ? "border-current" : "border-[color:var(--app-border)]"
-                              )}
-                            >
-                              {intentionalRest ? "x" : ""}
-                            </span>
-                            I am intentionally not doing anything for this outcome today
-                          </button>
-                        </div>
-                      ) : null}
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-2 lg:w-[11rem] lg:flex-col lg:items-stretch">
-                      <Button size="sm" onClick={() => actions.openOverview("outcome", summary.outcome.id)}>
-                        Open outcome
+                      <Button
+                        variant={intentionalRest ? "secondary" : "ghost"}
+                        onClick={() => actions.setDailyIntentionalRest(summary.outcome.id, todayISO, !intentionalRest)}
+                      >
+                        Rest today
                       </Button>
                       <Button
                         variant={entry?.done ? "secondary" : "primary"}
@@ -414,7 +403,7 @@ export default function OverviewLandingView() {
         )}
       </Card>
 
-      <Card className="app-card-soft rounded-[0.95rem] p-5 sm:p-6">
+      <Card className="rounded-[0.95rem] p-5 sm:p-6">
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_300px]">
           <div>
             <div className="app-kicker">Overview</div>

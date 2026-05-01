@@ -184,6 +184,10 @@ export function getAppState(): State {
   return store.get();
 }
 
+export function subscribeAppState(listener: Listener): () => void {
+  return store.subscribe(listener);
+}
+
 export const actions = {
   setWeekStartsOn: (weekStartsOn: WeekStartsOn) => {
     store.set((prev) => ({ ...prev, weekStartsOn }));
