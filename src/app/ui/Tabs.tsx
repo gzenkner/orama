@@ -15,6 +15,7 @@ export const TAB_META: Record<TabKey, { label: string; hint: string }> = {
   plan: { label: "Plan", hint: "month to day" },
   calendar: { label: "Calendar", hint: "whole-range check-ins" },
   archive: { label: "Victory Wall", hint: "celebrate completed wins" },
+  templates: { label: "Templates", hint: "starter plans" },
   settings: { label: "Settings", hint: "theme, prefs, and backup" }
 };
 

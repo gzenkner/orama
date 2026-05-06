@@ -2,12 +2,28 @@ import { getRemoteSyncContext } from "./portalBridge";
 import { actions } from "./store";
 
 export type RemoteLoadPhase = "connecting" | "fetching";
+export type RemoteLoadResult = "unavailable" | "empty" | "loaded";
 
-export async function loadRemoteStateIntoStore(onPhaseChange?: (phase: RemoteLoadPhase) => void): Promise<void> {
+async function readErrorDetail(response: Response): Promise<string> {
+  const raw = await response.text().catch(() => "");
+  if (!raw) return "";
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.error === "string") return parsed.error;
+    if (typeof parsed?.message === "string") return parsed.message;
+  } catch {
+    return raw.slice(0, 240);
+  }
+
+  return raw.slice(0, 240);
+}
+
+export async function loadRemoteStateIntoStore(onPhaseChange?: (phase: RemoteLoadPhase) => void): Promise<RemoteLoadResult> {
   onPhaseChange?.("connecting");
   const context = await getRemoteSyncContext();
   if (!context) {
-    return;
+    return "unavailable";
   }
 
   onPhaseChange?.("fetching");
@@ -24,13 +40,15 @@ export async function loadRemoteStateIntoStore(onPhaseChange?: (phase: RemoteLoa
   );
 
   if (!response.ok) {
-    throw new Error(`Could not load Orama state: HTTP ${response.status}`);
+    const detail = await readErrorDetail(response);
+    throw new Error(`Could not load Orama state: HTTP ${response.status}${detail ? ` - ${detail}` : ""}`);
   }
 
   const payload = await response.json();
   if (!payload?.state) {
-    return;
+    return "empty";
   }
 
   actions.importJSON(JSON.stringify(payload.state));
+  return "loaded";
 }

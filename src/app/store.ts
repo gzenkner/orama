@@ -9,10 +9,12 @@ import type {
   OverviewScope,
   PersistedStateV1,
   WeekStartsOn,
-  WeeklyGoal
+  WeeklyGoal,
+  YearlyGoal
 } from "./types";
 import { normalizeDaysOfWeek } from "./date";
-import { nextOutcomeThemeId, normalizeOutcomeTheme } from "./theme";
+import { activeOutcomeCount, MAX_ACTIVE_OUTCOMES, normalizeOutcomeTitle } from "./rules";
+import { nextOutcomeThemeId, normalizeOutcomeTheme, OUTCOME_THEME_ORDER } from "./theme";
 
 const STORAGE_KEY = "orama_state_v1";
 const LEGACY_STORAGE_KEYS = ["goals_app_state_v1"];
@@ -47,6 +49,7 @@ function defaultState(): State {
     },
     outcomes: [],
     archivedOutcomes: [],
+    yearly: {},
     monthly: {},
     weekly: {},
     daily: {},
@@ -57,6 +60,11 @@ function defaultState(): State {
 function normalizeOutcome(outcome: Omit<Outcome, "daysOfWeek"> & { daysOfWeek?: number[] }): Outcome {
   return {
     ...outcome,
+    title: normalizeOutcomeTitle(outcome.title),
+    consistencyTarget:
+      typeof (outcome as Partial<Outcome>).consistencyTarget === "number" && Number.isFinite((outcome as Partial<Outcome>).consistencyTarget)
+        ? Math.max(0, Math.min(100, Math.round((outcome as Partial<Outcome>).consistencyTarget!)))
+        : 90,
     daysOfWeek: normalizeDaysOfWeek(outcome.daysOfWeek)
   };
 }
@@ -83,6 +91,35 @@ function mergeActiveWithArchived(outcomes: Outcome[], archivedOutcomes: Archived
   return [...outcomes, ...restoredFromArchive];
 }
 
+function enforceActiveOutcomeLimit(outcomes: Outcome[], archivedOutcomes: ArchivedOutcome[]): Outcome[] {
+  const archivedOutcomeIdSet = new Set(archivedOutcomes.map((outcome) => outcome.id));
+  let activeCount = 0;
+
+  return outcomes.filter((outcome) => {
+    if (archivedOutcomeIdSet.has(outcome.id)) return true;
+    if (activeCount >= MAX_ACTIVE_OUTCOMES) return false;
+    activeCount += 1;
+    return true;
+  });
+}
+
+function assignUniqueActiveOutcomeThemes(outcomes: Outcome[], archivedOutcomes: ArchivedOutcome[]): Outcome[] {
+  const archivedOutcomeIdSet = new Set(archivedOutcomes.map((outcome) => outcome.id));
+  const usedThemeIds = new Set<Outcome["themeId"]>();
+
+  return outcomes.map((outcome) => {
+    if (archivedOutcomeIdSet.has(outcome.id)) return outcome;
+    if (!usedThemeIds.has(outcome.themeId)) {
+      usedThemeIds.add(outcome.themeId);
+      return outcome;
+    }
+
+    const nextThemeId = OUTCOME_THEME_ORDER.find((themeId) => !usedThemeIds.has(themeId)) ?? outcome.themeId;
+    usedThemeIds.add(nextThemeId);
+    return { ...outcome, themeId: nextThemeId };
+  });
+}
+
 function normalizeDailyItems(goal: DailyGoal | undefined): string[] {
   if (!goal) return [""];
   if (Array.isArray(goal.items) && goal.items.length) return goal.items;
@@ -100,7 +137,7 @@ function hasMeaningfulDailyItems(items: string[]): boolean {
 
 function normalizeAppTab(tab: unknown): AppTab {
   if (tab === "coach" || tab === "wizard") return "assistant";
-  if (tab === "overview" || tab === "assistant" || tab === "plan" || tab === "calendar" || tab === "archive" || tab === "settings") {
+  if (tab === "overview" || tab === "assistant" || tab === "plan" || tab === "calendar" || tab === "archive" || tab === "templates" || tab === "settings") {
     return tab;
   }
   return "overview";
@@ -125,6 +162,11 @@ function readState(): State {
       ? parsed.archivedOutcomes.map((outcome, index) => normalizeArchivedOutcome(outcome, index))
       : [];
 
+    const normalizedOutcomes = assignUniqueActiveOutcomeThemes(
+      enforceActiveOutcomeLimit(mergeActiveWithArchived(outcomes, archivedOutcomes), archivedOutcomes),
+      archivedOutcomes
+    );
+
     return {
       ...defaultState(),
       ...parsed,
@@ -139,7 +181,7 @@ function readState(): State {
           overview: 0
         }
       },
-      outcomes: mergeActiveWithArchived(outcomes, archivedOutcomes),
+      outcomes: normalizedOutcomes,
       archivedOutcomes,
       coachThreads:
         parsed && parsed.coachThreads && typeof parsed.coachThreads === "object" && !Array.isArray(parsed.coachThreads)
@@ -227,16 +269,24 @@ export const actions = {
   selectOutcome: (id: string) => {
     store.set((prev) => ({ ...prev, selectedOutcomeId: id }));
   },
-  addOutcome: (input: { title: string; notes?: string; startDate: string; endDate: string; daysOfWeek: number[] }) => {
+  addOutcome: (input: { title: string; notes?: string; startDate: string; endDate: string; daysOfWeek: number[]; consistencyTarget?: number }) => {
+    const current = store.get();
+    if (activeOutcomeCount(current.outcomes, current.archivedOutcomes) >= MAX_ACTIVE_OUTCOMES) {
+      throw new Error(`Orama allows up to ${MAX_ACTIVE_OUTCOMES} active outcomes. Complete or delete one before adding another.`);
+    }
+
     const now = new Date().toISOString();
-    const themeId = nextOutcomeThemeId(store.get().outcomes.map((outcome) => outcome.themeId));
+    const archivedOutcomeIdSet = new Set(current.archivedOutcomes.map((outcome) => outcome.id));
+    const activeThemeIds = current.outcomes.filter((outcome) => !archivedOutcomeIdSet.has(outcome.id)).map((outcome) => outcome.themeId);
+    const themeId = nextOutcomeThemeId(activeThemeIds);
     const outcome = normalizeOutcome({
       id: safeUUID(),
-      title: input.title.trim(),
+      title: input.title,
       notes: (input.notes ?? "").trim(),
       startDate: input.startDate,
       endDate: input.endDate,
       daysOfWeek: input.daysOfWeek,
+      consistencyTarget: input.consistencyTarget ?? 90,
       themeId,
       createdAt: now
     });
@@ -256,7 +306,7 @@ export const actions = {
     }));
     return outcome.id;
   },
-  updateOutcome: (id: string, patch: Partial<Pick<Outcome, "title" | "notes" | "startDate" | "endDate" | "daysOfWeek">>) => {
+  updateOutcome: (id: string, patch: Partial<Pick<Outcome, "title" | "notes" | "startDate" | "endDate" | "daysOfWeek" | "consistencyTarget">>) => {
     store.set((prev) => {
       const outcomes = prev.outcomes.map((outcome) => (outcome.id === id ? normalizeOutcome({ ...outcome, ...patch }) : outcome));
       const archivedOutcomes = prev.archivedOutcomes.map((archivedOutcome) => {
@@ -296,6 +346,8 @@ export const actions = {
       const archivedOutcomes = prev.archivedOutcomes.filter((o) => o.id !== id);
 
       const prefix = `${id}:`;
+      const yearly: Record<string, YearlyGoal> = {};
+      for (const [k, v] of Object.entries(prev.yearly)) if (!k.startsWith(prefix)) yearly[k] = v;
       const monthly: Record<string, MonthlyGoal> = {};
       for (const [k, v] of Object.entries(prev.monthly)) if (!k.startsWith(prefix)) monthly[k] = v;
       const weekly: Record<string, WeeklyGoal> = {};
@@ -305,7 +357,7 @@ export const actions = {
       const coachThreads: Record<string, OutcomeCoachThread> = {};
       for (const [k, v] of Object.entries(prev.coachThreads)) if (k !== id) coachThreads[k] = v;
 
-      return { ...prev, outcomes, archivedOutcomes, selectedOutcomeId, monthly, weekly, daily, coachThreads };
+      return { ...prev, outcomes, archivedOutcomes, selectedOutcomeId, yearly, monthly, weekly, daily, coachThreads };
     });
   },
   completeOutcome: (id: string, completedAt = new Date().toISOString()) => {
@@ -333,7 +385,43 @@ export const actions = {
   },
   setMonthlyTitle: (outcomeId: string, monthKey: string, title: string) => {
     const key = `${outcomeId}:${monthKey}`;
-    store.set((prev) => ({ ...prev, monthly: { ...prev.monthly, [key]: { title } } }));
+    const now = new Date();
+    const reviewedCycle = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    store.set((prev) => ({
+      ...prev,
+      monthly: {
+        ...prev.monthly,
+        [key]: {
+          ...(prev.monthly[key] ?? { title: "" }),
+          title,
+          reviewedAt: title.trim().length ? now.toISOString() : prev.monthly[key]?.reviewedAt,
+          reviewedCycle: title.trim().length ? reviewedCycle : prev.monthly[key]?.reviewedCycle
+        }
+      }
+    }));
+  },
+  reviewMonthlyGoal: (outcomeId: string, monthKey: string) => {
+    const key = `${outcomeId}:${monthKey}`;
+    const now = new Date();
+    const reviewedCycle = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    store.set((prev) => {
+      const current = prev.monthly[key] ?? { title: "" };
+      return {
+        ...prev,
+        monthly: {
+          ...prev.monthly,
+          [key]: {
+            ...current,
+            reviewedAt: now.toISOString(),
+            reviewedCycle
+          }
+        }
+      };
+    });
+  },
+  setYearlyTitle: (outcomeId: string, yearKey: string, title: string) => {
+    const key = `${outcomeId}:${yearKey}`;
+    store.set((prev) => ({ ...prev, yearly: { ...prev.yearly, [key]: { title } } }));
   },
   setWeeklyTitle: (outcomeId: string, monthKey: string, weekStartISO: string, title: string) => {
     const key = `${outcomeId}:${monthKey}:${weekStartISO}`;
@@ -452,13 +540,19 @@ export const actions = {
     const key = `${outcomeId}:${dateISO}`;
     store.set((prev) => {
       const prevDaily = prev.daily[key] ?? { title: "", done: false };
-      const items = normalizeDailyItems(prevDaily);
-      const canRest = !hasMeaningfulDailyItems(items);
+      const nextItems = intentionalRest ? [""] : normalizeDailyItems(prevDaily);
+      const nextItemsDone = intentionalRest ? [false] : normalizeDailyItemsDone(prevDaily, nextItems);
       return {
         ...prev,
         daily: {
           ...prev.daily,
-          [key]: { ...prevDaily, intentionalRest: canRest ? intentionalRest : false }
+          [key]: {
+            ...prevDaily,
+            title: nextItems[0] ?? "",
+            items: nextItems,
+            itemsDone: nextItemsDone,
+            intentionalRest
+          }
         }
       };
     });
@@ -496,6 +590,11 @@ export const actions = {
       ? parsed.archivedOutcomes.map((outcome, index) => normalizeArchivedOutcome(outcome, index))
       : [];
 
+    const normalizedOutcomes = assignUniqueActiveOutcomeThemes(
+      enforceActiveOutcomeLimit(mergeActiveWithArchived(outcomes, archivedOutcomes), archivedOutcomes),
+      archivedOutcomes
+    );
+
     store.set(() => ({
       ...defaultState(),
       ...parsed,
@@ -510,7 +609,7 @@ export const actions = {
           overview: 0
         }
       },
-      outcomes: mergeActiveWithArchived(outcomes, archivedOutcomes),
+      outcomes: normalizedOutcomes,
       archivedOutcomes,
       coachThreads:
         parsed && parsed.coachThreads && typeof parsed.coachThreads === "object" && !Array.isArray(parsed.coachThreads)

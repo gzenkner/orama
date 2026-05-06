@@ -9,8 +9,8 @@ export function clampProgress(value: number): number {
 
 export function trafficLightToneFromProgress(value: number): TrafficLightTone {
   const clamped = clampProgress(value);
-  if (clamped >= 0.67) return "green";
-  if (clamped >= 0.34) return "amber";
+  if (clamped >= 0.8) return "green";
+  if (clamped >= 0.7) return "amber";
   return "red";
 }
 

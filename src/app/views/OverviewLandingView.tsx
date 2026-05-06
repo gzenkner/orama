@@ -1,35 +1,34 @@
 import React from "react";
 import { actions, useAppState } from "../store";
-import type { ArchivedOutcome, DailyGoal, Outcome } from "../types";
-import { dateISOsInRange, formatDaysOfWeek, formatShortDate, isoToDayNumber, lastFullyElapsedDateISO, monthKeysInRange, toISODate } from "../date";
+import type { DailyGoal, Outcome } from "../types";
+import {
+  ALL_DAYS_OF_WEEK,
+  DAY_OF_WEEK_LABELS_SHORT,
+  dateISOsInRange,
+  formatShortDate,
+  isoToDayNumber,
+  normalizeDaysOfWeek,
+  toISODate
+} from "../date";
 import Button from "../ui/Button";
 import Card from "../ui/Card";
 import Input from "../ui/Input";
-import Progress from "../ui/Progress";
 import { cn } from "../ui/cn";
 import { getOutcomeThemeStyle } from "../theme";
-import { trafficLightSurfaceClass, trafficLightToneFromProgress, trafficLightVar, type TrafficLightTone } from "../ui/trafficLight";
+import { trafficLightSurfaceClass, type TrafficLightTone } from "../ui/trafficLight";
 
 type OutcomePhase = "upcoming" | "active" | "ended";
+type OutcomeActionStatus = "needs-task" | "ready" | "clear" | "closed" | "off-day" | "upcoming" | "ended";
 
 type OutcomeSummary = {
   outcome: Outcome;
   phase: OutcomePhase;
-  phaseTone: TrafficLightTone;
   activeDates: string[];
-  elapsedDates: string[];
-  doneElapsed: number;
-  elapsedTotal: number;
-  progressValue: number;
-  progressPercent: number;
-  openDaysLeft: number;
   daysUntilStart: number;
   nextOpenDate: string | null;
-  monthCount: number;
 };
 
 type TodaySummary = {
-  summary: OutcomeSummary;
   dateISO: string;
   entry: DailyGoal | undefined;
   items: string[];
@@ -38,16 +37,25 @@ type TodaySummary = {
   intentionalRest: boolean;
 };
 
-type OutcomeBoardItem =
-  | {
-      kind: "active";
-      summary: OutcomeSummary;
-    }
-  | {
-      kind: "completed";
-      summary: OutcomeSummary;
-      archivedOutcome: ArchivedOutcome;
-    };
+type OutcomeActionItem = {
+  summary: OutcomeSummary;
+  today: TodaySummary | null;
+  status: OutcomeActionStatus;
+};
+
+const STATUS_TONE: Record<OutcomeActionStatus, TrafficLightTone> = {
+  "needs-task": "red",
+  ready: "amber",
+  clear: "amber",
+  upcoming: "amber",
+  "off-day": "amber",
+  ended: "red",
+  closed: "green"
+};
+
+function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
 
 function dailyItems(entry: DailyGoal | undefined): string[] {
   if (Array.isArray(entry?.items) && entry.items.length) return entry.items;
@@ -58,130 +66,302 @@ function hasMeaningfulItems(items: string[]): boolean {
   return items.some((item) => item.trim().length > 0);
 }
 
-function pluralize(count: number, singular: string, plural = `${singular}s`): string {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function phaseCopy(summary: OutcomeSummary): { label: string; detail: string } {
-  if (summary.phase === "upcoming") {
-    return {
-      label: "Upcoming",
-      detail: `${pluralize(summary.daysUntilStart, "day")} until ${formatShortDate(summary.outcome.startDate)}`
-    };
-  }
-
-  if (summary.phase === "ended") {
-    return {
-      label: "Ended",
-      detail: `Window closed on ${formatShortDate(summary.outcome.endDate)}`
-    };
-  }
-
-  if (summary.nextOpenDate === toISODate(new Date())) {
-    return { label: "In motion", detail: "Today is still open" };
-  }
-
-  if (summary.nextOpenDate) {
-    return { label: "In motion", detail: `Next open day ${formatShortDate(summary.nextOpenDate)}` };
-  }
-
-  return { label: "In motion", detail: "Every remaining active day is already closed" };
+function taskPreview(today: TodaySummary | null): string {
+  if (!today) return "";
+  const tasks = today.items.map((item) => item.trim()).filter(Boolean);
+  if (!tasks.length) return "";
+  return tasks.length === 1 ? tasks[0] : `${tasks[0]} +${tasks.length - 1} more`;
 }
 
 function summarizeOutcome(
   outcome: Outcome,
   daily: Record<string, DailyGoal>,
   todayISO: string,
-  todayDay: number,
-  lastElapsedDay: number
+  todayDay: number
 ): OutcomeSummary {
   const activeDates = dateISOsInRange(outcome.startDate, outcome.endDate, outcome.daysOfWeek);
   const startDay = isoToDayNumber(outcome.startDate);
   const endDay = isoToDayNumber(outcome.endDate);
-
   const phase: OutcomePhase = todayDay < startDay ? "upcoming" : todayDay > endDay ? "ended" : "active";
-  const elapsedUntil = Math.min(lastElapsedDay, endDay);
-  const elapsedDates = activeDates.filter((dateISO) => isoToDayNumber(dateISO) <= elapsedUntil);
-  const doneElapsed = elapsedDates.reduce((count, dateISO) => count + (daily[`${outcome.id}:${dateISO}`]?.done ? 1 : 0), 0);
-  const elapsedTotal = elapsedDates.length;
-  const progressValue = elapsedTotal ? doneElapsed / elapsedTotal : 0;
-  const openDaysLeft = activeDates.reduce((count, dateISO) => {
-    if (dateISO < todayISO) return count;
-    return count + (daily[`${outcome.id}:${dateISO}`]?.done ? 0 : 1);
-  }, 0);
   const nextOpenDate = activeDates.find((dateISO) => dateISO >= todayISO && !daily[`${outcome.id}:${dateISO}`]?.done) ?? null;
-  const phaseTone = phase === "upcoming" ? "amber" : trafficLightToneFromProgress(progressValue);
 
   return {
     outcome,
     phase,
-    phaseTone,
     activeDates,
-    elapsedDates,
-    doneElapsed,
-    elapsedTotal,
-    progressValue,
-    progressPercent: Math.round(progressValue * 100),
-    openDaysLeft,
     daysUntilStart: Math.max(startDay - todayDay, 0),
-    nextOpenDate,
-    monthCount: monthKeysInRange(outcome.startDate, outcome.endDate).length
+    nextOpenDate
   };
 }
 
-function MetricTile({ label, value, detail }: { label: string; value: string; detail: string }) {
+function buildTodaySummary(outcomeId: string, daily: Record<string, DailyGoal>, todayISO: string): TodaySummary {
+  const entry = daily[`${outcomeId}:${todayISO}`];
+  const items = dailyItems(entry);
+  return {
+    dateISO: todayISO,
+    entry,
+    items,
+    itemsDone: Array.isArray(entry?.itemsDone) ? entry.itemsDone : [],
+    hasTasks: hasMeaningfulItems(items),
+    intentionalRest: Boolean(entry?.intentionalRest)
+  };
+}
+
+function actionStatus(summary: OutcomeSummary, today: TodaySummary | null, todayISO: string): OutcomeActionStatus {
+  if (summary.phase === "upcoming") return "upcoming";
+  if (summary.phase === "ended") return "ended";
+  if (!summary.activeDates.includes(todayISO)) return "off-day";
+  if (today?.entry?.done) return "closed";
+  if (!today?.hasTasks) return "needs-task";
+  return "ready";
+}
+
+function actionHeadline(item: OutcomeActionItem): string {
+  if (item.status === "needs-task") return "Add one small task.";
+  if (item.status === "ready") return taskPreview(item.today) || "Task set.";
+  if (item.status === "clear") return "You chose no task today.";
+  if (item.status === "closed") return "Done for today.";
+  if (item.status === "upcoming") return `Starts ${formatShortDate(item.summary.outcome.startDate)}.`;
+  if (item.status === "ended") return `Ended ${formatShortDate(item.summary.outcome.endDate)}.`;
+  if (item.summary.nextOpenDate) return `Next open day ${formatShortDate(item.summary.nextOpenDate)}.`;
+  return "Not scheduled today.";
+}
+
+function actionSupport(item: OutcomeActionItem): string {
+  if (item.status === "needs-task") return "";
+  if (item.status === "ready") return "";
+  if (item.status === "clear") return "Add a task if that changed.";
+  if (item.status === "closed") return "";
+  if (item.status === "upcoming") return `${pluralize(item.summary.daysUntilStart, "day")} until the window opens.`;
+  if (item.status === "ended") return "Review it or move it to the Victory Wall.";
+  return "Not scheduled today.";
+}
+
+function statusLabel(status: OutcomeActionStatus): string {
+  if (status === "needs-task") return "Task required";
+  if (status === "ready") return "In motion";
+  if (status === "clear") return "No task today";
+  if (status === "closed") return "Done";
+  if (status === "off-day") return "Not today";
+  if (status === "upcoming") return "Upcoming";
+  return "Review";
+}
+
+function openOutcome(outcomeId: string) {
+  actions.openOverview("outcome", outcomeId);
+}
+
+function DayTiles({ daysOfWeek }: { daysOfWeek: Outcome["daysOfWeek"] }) {
+  const activeDaySet = new Set(normalizeDaysOfWeek(daysOfWeek));
+
   return (
-    <div className="rounded-[0.75rem] border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-4 py-3">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] app-subtle">{label}</div>
-      <div className="mt-2 font-display text-[1.5rem] font-semibold leading-none">{value}</div>
-      <div className="mt-2 text-xs app-muted">{detail}</div>
+    <div className="app-day-tiles flex flex-wrap gap-1.5" aria-label="Planning days">
+      {ALL_DAYS_OF_WEEK.map((day) => {
+        const active = activeDaySet.has(day);
+        return (
+          <span
+            key={day}
+            className={cn(
+              "app-day-tile inline-flex h-6 min-w-7 items-center justify-center rounded-[0.45rem] border px-1.5 text-[10px] font-bold uppercase tracking-[0.08em]",
+              active
+                ? "border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] text-[color:var(--outcome-ink)]"
+                : "border-[color:var(--app-border)] bg-[color:var(--app-elevated)] text-[color:var(--app-subtle)] opacity-55"
+            )}
+          >
+            {DAY_OF_WEEK_LABELS_SHORT[day].slice(0, 1)}
+          </span>
+        );
+      })}
     </div>
   );
 }
 
-function compactCount(value: number): string {
-  return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: value >= 1000 ? 1 : 0 }).format(value);
+function TaskDoneIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      className="h-3.5 w-3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3.5 8.2 6.6 11 12.8 4.8" />
+    </svg>
+  );
 }
 
-function OutcomeProgressBars({ summaries }: { summaries: OutcomeSummary[] }) {
-  if (!summaries.length) {
-    return (
-      <div className="rounded-[0.8rem] border border-dashed border-[color:var(--app-border)] px-4 py-5 text-sm app-muted">
-        Create an outcome to see progress here.
-      </div>
-    );
-  }
+function closeDayAndEliminateTasks(outcomeId: string, today: TodaySummary) {
+  today.items.forEach((task, index) => {
+    if (task.trim() && !today.itemsDone[index]) {
+      actions.toggleDailyItemDone(outcomeId, today.dateISO, index);
+    }
+  });
+  actions.toggleDailyDone(outcomeId, today.dateISO);
+}
+
+function OutcomeActionRow({ item }: { item: OutcomeActionItem }) {
+  const { summary, today, status } = item;
+  const outcome = summary.outcome;
+  const statusTone = STATUS_TONE[status];
+  const canClose = status === "ready" || status === "clear" || status === "closed";
+  const support = actionSupport(item);
+  const canEditTasks = Boolean(today && status !== "upcoming" && status !== "ended" && status !== "off-day");
+  const prominentStatus = status === "needs-task" || status === "ready" || status === "clear" || status === "closed";
+  const taskRows = today ? today.items.map((task, index) => ({ task, index, done: Boolean(today.itemsDone[index]) })) : [];
+  const activeTaskRows = taskRows.filter((row) => !row.done);
+  const eliminatedTaskRows = taskRows.filter((row) => row.done && row.task.trim());
 
   return (
-    <div className="rounded-[0.85rem] border border-[color:var(--app-border)] bg-[color:var(--app-card)] p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="app-kicker">Outcome progress</div>
-        <div className="text-[11px] app-muted">All outcomes</div>
-      </div>
-
-      <div className="mt-4 grid gap-3">
-        {summaries.map((summary) => {
-          return (
+    <div
+      style={getOutcomeThemeStyle(outcome.themeId)}
+      className={cn(
+        "app-today-action-card group flex min-h-[9.25rem] min-w-0 flex-col rounded-[0.9rem] border bg-[color:var(--app-card)] p-3.5 transition",
+        "border-[color:var(--outcome-border)] hover:bg-[color:var(--app-elevated)]"
+      )}
+    >
+      <div className="flex h-full min-h-0 flex-col gap-3">
+        <div className="app-today-card-header flex min-w-0 items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="inline-flex h-3 w-3 shrink-0 rounded-full border border-[color:var(--outcome-border)] bg-[color:var(--outcome-accent)]" />
             <button
-              key={summary.outcome.id}
               type="button"
-              className="grid gap-2 text-left transition hover:opacity-85"
-              onClick={() => {
-                actions.openOverview("outcome", summary.outcome.id);
-              }}
+              className="min-w-0 truncate text-left text-base font-semibold leading-6 transition hover:opacity-75"
+              onClick={() => openOutcome(outcome.id)}
             >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 flex items-center gap-2">
-                  <span className="inline-flex h-3 w-3 shrink-0 rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-elevated)]" />
-                  <div className="truncate text-sm font-semibold">{summary.outcome.title}</div>
-                </div>
-                <div className="shrink-0 text-xs font-semibold">{summary.progressPercent}%</div>
-              </div>
-
-              <Progress value={summary.progressValue} tone={summary.phaseTone} className="h-2 rounded-[0.35rem]" />
+              {outcome.title}
             </button>
-          );
-        })}
+          </div>
+          <span
+            data-status={status}
+            className={cn(
+              "app-today-status inline-flex shrink-0 items-center rounded-[0.55rem] border font-bold uppercase tracking-[0.14em]",
+              prominentStatus ? "px-3.5 py-1.5 text-[12px] shadow-sm" : "px-2.5 py-1 text-[10px]",
+              status === "needs-task" ? "shadow-[0_0_0_2px_var(--app-signal-red-bg)]" : "",
+              trafficLightSurfaceClass(statusTone)
+            )}
+          >
+            {status === "needs-task" ? (
+              <span className="mr-1.5 inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[color:var(--app-signal-red-fill)] text-white">
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3.2"
+                  strokeLinecap="round"
+                >
+                  <path d="M12 5.75v7" />
+                  <circle cx="12" cy="18" r="1.8" fill="currentColor" stroke="none" />
+                </svg>
+              </span>
+            ) : null}
+            {statusLabel(status)}
+          </span>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col justify-center">
+          {canEditTasks && today ? (
+            <div className="app-today-task-list grid min-w-0 gap-2">
+              {activeTaskRows.map(({ task, index }) => (
+                <div key={index} className="app-today-task-row grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.55rem] border border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] text-[color:var(--outcome-ink)] transition hover:bg-[color:var(--outcome-accent)] disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Mark task done"
+                    disabled={!task.trim()}
+                    onClick={() => actions.toggleDailyItemDone(outcome.id, today.dateISO, index)}
+                  >
+                    <TaskDoneIcon />
+                  </button>
+                  <Input
+                    value={task}
+                    onChange={(event) => actions.setDailyItem(outcome.id, today.dateISO, index, event.target.value)}
+                    placeholder={index === 0 ? "One task for today..." : "Another small task..."}
+                    className="min-w-0 h-10 rounded-[0.7rem] border-[color:var(--outcome-border)] bg-[color:var(--app-elevated)] text-sm font-semibold text-[color:var(--outcome-ink)]"
+                  />
+                  {today.items.length > 1 || task.trim() ? (
+                    <button
+                      type="button"
+                      className="h-8 w-8 shrink-0 rounded-[0.55rem] text-sm font-semibold text-[color:var(--app-muted)] transition hover:bg-[color:var(--app-nav-hover)] hover:text-[color:var(--app-text)]"
+                      aria-label="Remove task"
+                      onClick={() => actions.removeDailyItem(outcome.id, today.dateISO, index)}
+                    >
+                      -
+                    </button>
+                  ) : (
+                    <span className="h-8 w-8" aria-hidden="true" />
+                  )}
+                </div>
+              ))}
+              {eliminatedTaskRows.length ? (
+                <div className="mt-1 grid gap-1.5 pt-2">
+                  {eliminatedTaskRows.map(({ task, index }) => (
+                    <button
+                      key={index}
+                      type="button"
+                      className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-[0.55rem] px-1 py-1 text-left text-[color:var(--app-muted)] transition hover:text-[color:var(--app-text)]"
+                      aria-label="Move task back to active"
+                      onClick={() => actions.toggleDailyItemDone(outcome.id, today.dateISO, index)}
+                    >
+                      <TaskDoneIcon />
+                      <span className="truncate text-[12px] font-semibold sm:text-sm">{task}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="truncate text-sm font-semibold leading-5 text-[color:var(--app-text)]">{actionHeadline(item)}</div>
+          )}
+        </div>
+
+        <div className="app-today-card-footer flex items-center justify-between gap-2 pt-2.5">
+          <div className="min-w-0">
+            <DayTiles daysOfWeek={outcome.daysOfWeek} />
+            {support ? <div className="app-today-card-support mt-1 truncate text-[11px] app-muted">{support}</div> : null}
+          </div>
+          {canEditTasks && today ? (
+            <div className="app-today-card-actions flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                className="h-8 rounded-[0.55rem] px-2.5 text-[11px] font-semibold text-[color:var(--app-muted)] transition hover:bg-[color:var(--app-nav-hover)] hover:text-[color:var(--app-text)]"
+                onClick={() => actions.addDailyItem(outcome.id, today.dateISO)}
+              >
+                + Add
+              </button>
+              <Button
+                variant={today.entry?.done ? "secondary" : "primary"}
+                size="sm"
+                className="h-8 rounded-[0.55rem] px-3 text-[12px]"
+                disabled={!canClose}
+                onClick={() => {
+                  if (today.entry?.done) {
+                    actions.toggleDailyDone(outcome.id, today.dateISO);
+                    return;
+                  }
+                  closeDayAndEliminateTasks(outcome.id, today);
+                }}
+              >
+                {today.entry?.done ? "Reopen" : "Mark done"}
+              </Button>
+            </div>
+          ) : null}
+
+          {!canEditTasks && status !== "needs-task" ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 shrink-0 rounded-[0.55rem] px-3 text-[12px]"
+              onClick={() => openOutcome(outcome.id)}
+            >
+              Open
+            </Button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -191,426 +371,82 @@ export default function OverviewLandingView() {
   const outcomes = useAppState((s) => s.outcomes);
   const archivedOutcomes = useAppState((s) => s.archivedOutcomes);
   const daily = useAppState((s) => s.daily);
-  const [showCompletedOnBoard, setShowCompletedOnBoard] = React.useState(true);
-  const [boardQuery, setBoardQuery] = React.useState("");
 
   const todayISO = toISODate(new Date());
   const todayDay = isoToDayNumber(todayISO);
-  const lastElapsedDay = isoToDayNumber(lastFullyElapsedDateISO());
   const archivedOutcomeIdSet = React.useMemo(() => new Set(archivedOutcomes.map((outcome) => outcome.id)), [archivedOutcomes]);
   const activeOutcomes = React.useMemo(
     () => outcomes.filter((outcome) => !archivedOutcomeIdSet.has(outcome.id)),
     [archivedOutcomeIdSet, outcomes]
   );
 
-  const summaries = React.useMemo(
-    () => activeOutcomes.map((outcome) => summarizeOutcome(outcome, daily, todayISO, todayDay, lastElapsedDay)),
-    [activeOutcomes, daily, lastElapsedDay, todayDay, todayISO]
-  );
-  const archivedSummaries = React.useMemo(
-    () =>
-      archivedOutcomes.map((outcome) => ({
-        archivedOutcome: outcome,
-        summary: summarizeOutcome(outcome, daily, todayISO, todayDay, lastElapsedDay)
-      })),
-    [archivedOutcomes, daily, lastElapsedDay, todayDay, todayISO]
-  );
-  const boardItems = React.useMemo<OutcomeBoardItem[]>(
-    () => [
-      ...summaries.map((summary) => ({ kind: "active", summary }) satisfies OutcomeBoardItem),
-      ...(showCompletedOnBoard
-        ? archivedSummaries.map(({ archivedOutcome, summary }) => ({ kind: "completed", archivedOutcome, summary }) satisfies OutcomeBoardItem)
-        : [])
-    ],
-    [archivedSummaries, showCompletedOnBoard, summaries]
-  );
-  const normalizedBoardQuery = boardQuery.trim().toLowerCase();
-  const filteredBoardItems = React.useMemo(
-    () =>
-      normalizedBoardQuery
-        ? boardItems.filter((item) => item.summary.outcome.title.toLowerCase().includes(normalizedBoardQuery))
-        : boardItems,
-    [boardItems, normalizedBoardQuery]
-  );
-
-  const activeCount = summaries.filter((summary) => summary.phase === "active").length;
-  const upcomingCount = summaries.filter((summary) => summary.phase === "upcoming").length;
-  const unarchivedEndedCount = summaries.filter((summary) => summary.phase === "ended").length;
-  const completedCount = archivedSummaries.length;
-  const endedCount = unarchivedEndedCount + completedCount;
-  const totalElapsed = summaries.reduce((count, summary) => count + summary.elapsedTotal, 0);
-  const totalDone = summaries.reduce((count, summary) => count + summary.doneElapsed, 0);
-  const totalOpenDays = summaries.reduce((count, summary) => count + summary.openDaysLeft, 0);
-  const overallProgress = totalElapsed ? totalDone / totalElapsed : 0;
-  const overallPercent = Math.round(overallProgress * 100);
-  const overallTone = totalElapsed ? trafficLightToneFromProgress(overallProgress) : "amber";
-  const totalOutcomes = summaries.length + completedCount;
-  const totalOutcomeLengthDays =
-    summaries.reduce(
-      (count, summary) => count + (isoToDayNumber(summary.outcome.endDate) - isoToDayNumber(summary.outcome.startDate) + 1),
-      0
-    ) +
-    archivedSummaries.reduce(
-      (count, item) => count + (isoToDayNumber(item.summary.outcome.endDate) - isoToDayNumber(item.summary.outcome.startDate) + 1),
-      0
-    );
-  const averageOutcomeLengthDays = totalOutcomes
-    ? Math.round(totalOutcomeLengthDays / totalOutcomes)
-    : 0;
-  const activeShare = totalOutcomes ? activeCount / totalOutcomes : 0;
-  const upcomingShare = totalOutcomes ? upcomingCount / totalOutcomes : 0;
-  const endedShare = totalOutcomes ? endedCount / totalOutcomes : 0;
-  const compactOpenDays = compactCount(totalOpenDays);
-  const todaySummaries = summaries
-    .filter((summary) => summary.phase === "active" && summary.activeDates.includes(todayISO))
-    .map((summary) => {
-      const entry = daily[`${summary.outcome.id}:${todayISO}`];
-      const items = dailyItems(entry);
-      return {
-        summary,
-        dateISO: todayISO,
-        entry,
-        items,
-        itemsDone: Array.isArray(entry?.itemsDone) ? entry.itemsDone : [],
-        hasTasks: hasMeaningfulItems(items),
-        intentionalRest: Boolean(entry?.intentionalRest)
-      } satisfies TodaySummary;
+  const actionItems = React.useMemo(() => {
+    return activeOutcomes.map((outcome) => {
+      const summary = summarizeOutcome(outcome, daily, todayISO, todayDay);
+      const today = summary.phase === "active" && summary.activeDates.includes(todayISO) ? buildTodaySummary(outcome.id, daily, todayISO) : null;
+      const status = actionStatus(summary, today, todayISO);
+      return { summary, today, status } satisfies OutcomeActionItem;
     });
+  }, [activeOutcomes, daily, todayDay, todayISO]);
+
+  const activeActionItems = actionItems.filter((item) => item.status !== "closed");
+  const completedActionItems = actionItems.filter((item) => item.status === "closed");
 
   return (
-    <div className="grid gap-4">
-      <Card className="rounded-[0.95rem] p-5 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="app-kicker">Today</div>
-            <div className="font-display mt-2 text-[1.35rem] font-semibold leading-tight sm:text-[1.6rem]">Define today’s tasks here.</div>
-            <div className="mt-2 max-w-3xl text-sm leading-6 app-muted">
-              Each active outcome needs either a task or an explicit intentional-empty acknowledgement.
-            </div>
-          </div>
-          <div className="rounded-[0.6rem] border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-3 py-1.5 text-xs font-semibold app-muted">
-            {formatShortDate(todayISO)}
-          </div>
+    <Card className="app-today-landing-card min-w-0 rounded-[0.95rem] p-3.5 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
+        <div className="min-w-0">
+          <div className="app-kicker">Outcomes</div>
+          <div className="font-display mt-1.5 text-[1.42rem] font-semibold leading-tight sm:mt-2 sm:text-[2rem]">Start here.</div>
         </div>
+        <div className="shrink-0 rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-3 py-2 text-right shadow-sm sm:rounded-[0.75rem] sm:px-3.5 sm:py-2.5">
+          <div className="app-kicker">Today</div>
+          <div className="mt-1 text-sm font-semibold text-[color:var(--app-text)]">{formatShortDate(todayISO)}</div>
+        </div>
+      </div>
 
-        {todaySummaries.length ? (
-          <div className="mt-4 grid gap-3 xl:grid-cols-2">
-            {todaySummaries.map(({ summary, entry, items, itemsDone, hasTasks, intentionalRest }) => {
-              const canClose = hasTasks || intentionalRest;
-              const taskCount = items.filter((item) => item.trim().length > 0).length;
-              return (
-                <div
-                  key={summary.outcome.id}
-                  style={getOutcomeThemeStyle(summary.outcome.themeId)}
-                  className="rounded-[0.8rem] border border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] p-3"
-                >
-                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex h-3 w-3 rounded-full border border-[color:var(--outcome-border)] bg-[color:var(--outcome-accent)]" />
-                        <button
-                          type="button"
-                          className="truncate text-left text-sm font-semibold transition hover:opacity-75"
-                          onClick={() => actions.openOverview("outcome", summary.outcome.id)}
-                        >
-                          {summary.outcome.title}
-                        </button>
-                        <span
-                          className="rounded-[0.45rem] border border-[color:var(--outcome-border)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
-                        >
-                          {formatDaysOfWeek(summary.outcome.daysOfWeek)}
-                        </span>
-                        <span className="text-[11px] opacity-75">
-                          {intentionalRest && !hasTasks ? "Intentional rest" : `${taskCount} task${taskCount === 1 ? "" : "s"}`}
-                        </span>
-                      </div>
-
-                      <div className="mt-3 grid gap-1.5">
-                        {items.map((title, index) => {
-                          const itemDone = Boolean(itemsDone[index]);
-                          return (
-                            <div key={index} className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                className="app-check inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[0.4rem] transition"
-                                data-state={itemDone ? "done" : title.trim().length ? "planned" : "none"}
-                                aria-pressed={itemDone}
-                                onClick={() => actions.toggleDailyItemDone(summary.outcome.id, todayISO, index)}
-                              >
-                                x
-                              </button>
-                              <Input
-                                value={title}
-                                onChange={(e) => actions.setDailyItem(summary.outcome.id, todayISO, index, e.target.value)}
-                                placeholder={index === 0 ? "What needs to happen today?" : "Another task..."}
-                                className={cn(
-                                  "h-9 flex-1 rounded-[0.5rem] border-[color:var(--outcome-border)] bg-[color:var(--outcome-soft)] px-3 text-[13px] text-[color:var(--outcome-ink)]",
-                                  itemDone ? "line-through opacity-70" : ""
-                                )}
-                              />
-                              <button
-                                type="button"
-                                className="app-ghost-outline inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[0.45rem] text-sm transition"
-                                onClick={() => actions.removeDailyItem(summary.outcome.id, todayISO, index)}
-                              >
-                                -
-                              </button>
-                            </div>
-                          );
-                        })}
-
-                        <div className="flex justify-end">
-                          <button
-                            type="button"
-                            className="app-ghost-outline inline-flex h-7 w-7 items-center justify-center rounded-[0.45rem] text-sm transition"
-                            onClick={() => actions.addDailyItem(summary.outcome.id, todayISO)}
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-between gap-2 lg:w-[11rem] lg:flex-col lg:items-stretch">
-                      <Button
-                        variant={intentionalRest ? "secondary" : "ghost"}
-                        onClick={() => actions.setDailyIntentionalRest(summary.outcome.id, todayISO, !intentionalRest)}
-                      >
-                        Rest today
-                      </Button>
-                      <Button
-                        variant={entry?.done ? "secondary" : "primary"}
-                        disabled={!canClose}
-                        title={!canClose ? "Add a task or acknowledge an intentional empty day first" : undefined}
-                        onClick={() => actions.toggleDailyDone(summary.outcome.id, todayISO)}
-                      >
-                        {entry?.done ? "Mark not done" : "Mark today done"}
-                      </Button>
-                      <div className="text-[11px] app-muted lg:text-right">
-                        {hasTasks ? `${taskCount} task${taskCount === 1 ? "" : "s"}` : "No tasks"}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      <div className="app-today-list-grid mt-4 grid min-w-0 gap-3 sm:mt-5 lg:grid-cols-2">
+        {activeActionItems.length ? (
+          activeActionItems.map((item) => <OutcomeActionRow key={item.summary.outcome.id} item={item} />)
         ) : (
-          <div className="mt-4 rounded-[0.8rem] border border-dashed border-[color:var(--app-border)] px-4 py-5 text-sm app-muted">
-            No active outcomes land on today.
+          <div className="rounded-[0.9rem] border border-dashed border-[color:var(--app-border)] px-4 py-8 text-center text-sm app-muted lg:col-span-2">
+            {completedActionItems.length ? (
+              <div className="mx-auto flex max-w-md flex-col items-center gap-3">
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[color:var(--app-signal-green-border)] bg-[color:var(--app-signal-green-bg)] text-[color:var(--app-signal-green-text)] shadow-sm">
+                  <TaskDoneIcon />
+                </div>
+                <div>
+                  <div className="font-display text-lg font-semibold leading-tight text-[color:var(--app-text)]">Great job.</div>
+                  <div className="mt-1 text-sm app-muted">Everything for today is done.</div>
+                </div>
+              </div>
+            ) : (
+              "No active outcomes yet. Create one from the sidebar when you are ready to commit."
+            )}
           </div>
         )}
-      </Card>
+      </div>
 
-      <Card className="rounded-[0.95rem] p-5 sm:p-6">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_300px]">
-          <div>
-            <div className="app-kicker">Overview</div>
-            <div className="font-display mt-3 text-[1.7rem] font-semibold leading-tight sm:text-[2.1rem]">Overall progress</div>
-            <div className="mt-2 max-w-3xl text-sm leading-6 app-muted">One view for consistency, open days, and what needs attention next.</div>
-
-            <div className="mt-5">
-              <OutcomeProgressBars summaries={summaries} />
+      {completedActionItems.length ? (
+        <div className="app-today-completed-panel mt-4 min-w-0 rounded-[0.95rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] p-3.5 sm:mt-5 sm:p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="app-kicker">Completed tasks</div>
+              <div className="mt-1 text-sm font-semibold text-[color:var(--app-text)]">
+                Done outcomes move here so the remaining work stays visually stable.
+              </div>
             </div>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <MetricTile label="Outcomes" value={`${summaries.length}`} detail={`${activeCount} active, ${upcomingCount} upcoming`} />
-              <MetricTile
-                label="Average length"
-                value={totalOutcomes ? pluralize(averageOutcomeLengthDays, "day") : "0 days"}
-                detail={totalOutcomes ? "Average planned window per outcome" : "No outcomes yet"}
-              />
-              <MetricTile
-                label="Consistency"
-                value={`${overallPercent}%`}
-                detail={totalElapsed ? `${totalDone}/${totalElapsed} days closed` : "No elapsed days yet"}
-              />
-              <MetricTile label="Open days" value={`${totalOpenDays}`} detail="Active days still open" />
-              <MetricTile label="Closed windows" value={`${endedCount}`} detail={endedCount ? "Finished outcomes" : "None finished"} />
-            </div>
+            <span className={cn("shrink-0 rounded-[0.55rem] border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em]", trafficLightSurfaceClass("green"))}>
+              {completedActionItems.length} done
+            </span>
           </div>
-
-          <div
-            className="grid gap-3 rounded-[0.85rem] border bg-[color:var(--app-card)] p-4"
-            style={{ borderColor: `var(--app-signal-${overallTone}-border)` }}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="app-kicker">Workspace rhythm</div>
-              <div
-                className={cn(
-                  "rounded-[0.55rem] border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]",
-                  trafficLightSurfaceClass(overallTone)
-                )}
-              >
-                {totalElapsed ? `${totalDone}/${totalElapsed}` : "No elapsed days"}
-              </div>
-            </div>
-
-            <div className="rounded-[0.8rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] p-3">
-              <div className="flex items-end justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-display text-[2.2rem] font-semibold leading-none">{overallPercent}%</div>
-                  <div className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] app-muted">overall consistency</div>
-                </div>
-                <div className="grid min-w-0 grid-cols-2 gap-2 text-right">
-                  <div className="min-w-0 rounded-[0.65rem] border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-2.5 py-2">
-                    <div className="truncate text-[10px] uppercase tracking-[0.16em] app-subtle">Done</div>
-                    <div className="mt-1 truncate text-sm font-semibold">{totalDone}</div>
-                  </div>
-                  <div className="min-w-0 rounded-[0.65rem] border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-2.5 py-2">
-                    <div className="truncate text-[10px] uppercase tracking-[0.16em] app-subtle">Elapsed</div>
-                    <div className="mt-1 truncate text-sm font-semibold">{totalElapsed}</div>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-3">
-                <Progress value={overallProgress} tone={overallTone} className="h-3.5 rounded-[0.5rem]" />
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.16em] app-muted">
-                <span>Portfolio mix</span>
-                <span>{totalOutcomes ? `${activeCount}/${upcomingCount}/${endedCount}` : "0/0/0"}</span>
-              </div>
-              <div className="flex h-3 overflow-hidden rounded-full bg-[color:var(--app-elevated)]">
-                <div style={{ width: `${activeShare * 100}%`, background: trafficLightVar("green", "fill") }} />
-                <div style={{ width: `${upcomingShare * 100}%`, background: trafficLightVar("amber", "fill") }} />
-                <div style={{ width: `${endedShare * 100}%`, background: "var(--app-border)" }} />
-              </div>
-            </div>
-
-            <div className="grid gap-2.5">
-              {[
-                { label: "Active", count: activeCount, share: activeShare, fill: trafficLightVar("green", "fill") },
-                { label: "Upcoming", count: upcomingCount, share: upcomingShare, fill: trafficLightVar("amber", "fill") },
-                { label: "Ended", count: endedCount, share: endedShare, fill: "var(--app-border)" }
-              ].map((item) => (
-                <div key={item.label} className="grid gap-1.5">
-                  <div className="flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-[0.16em]">
-                    <div className="min-w-0 flex items-center gap-2 app-muted">
-                      <span className="h-2 w-2 rounded-full" style={{ background: item.fill }} />
-                      <span className="truncate">{item.label}</span>
-                    </div>
-                    <span className="shrink-0 text-[color:var(--app-text)]">{item.count}</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-[color:var(--app-elevated)]">
-                    <div className="h-full rounded-full" style={{ width: `${item.share * 100}%`, background: item.fill }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="min-w-0 rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-3 py-2">
-                <div className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] app-subtle">Open days</div>
-                <div className="mt-1 truncate text-base font-semibold leading-none">{compactOpenDays}</div>
-              </div>
-              <div className="min-w-0 rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-3 py-2">
-                <div className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] app-subtle">Outcomes</div>
-                <div className="mt-1 truncate text-base font-semibold leading-none">{totalOutcomes}</div>
-              </div>
-            </div>
+          <div className="app-today-list-grid grid min-w-0 gap-3 lg:grid-cols-2">
+            {completedActionItems.map((item) => (
+              <OutcomeActionRow key={item.summary.outcome.id} item={item} />
+            ))}
           </div>
         </div>
-      </Card>
-
-      <Card className="rounded-[0.9rem] p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="app-kicker">Outcome board</div>
-            <div className="mt-2 text-base font-semibold">Progress by outcome.</div>
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[24rem] sm:max-w-[28rem]">
-            <Input
-              value={boardQuery}
-              onChange={(e) => setBoardQuery(e.target.value)}
-              placeholder="Search outcomes..."
-              className="h-10 rounded-[0.7rem] px-3"
-            />
-            {archivedSummaries.length ? (
-              <div className="flex justify-end">
-                <Button
-                  size="sm"
-                  variant={showCompletedOnBoard ? "secondary" : "ghost"}
-                  onClick={() => setShowCompletedOnBoard((prev) => !prev)}
-                >
-                  {showCompletedOnBoard ? "Hide completed" : "Show completed"}
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-2.5">
-            {filteredBoardItems.length ? (
-            filteredBoardItems.map((item) => {
-              const summary = item.summary;
-              const copy =
-                item.kind === "completed"
-                  ? {
-                      label: "Completed",
-                      detail: `Victory Wall on ${formatShortDate(item.archivedOutcome.completedAt.slice(0, 10))}`
-                    }
-                  : phaseCopy(summary);
-
-              return (
-                <button
-                  key={`${item.kind}:${summary.outcome.id}`}
-                  type="button"
-                  className="rounded-[0.8rem] border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-4 py-3 text-left transition hover:bg-[color:var(--app-nav-hover)]"
-                  onClick={() => {
-                    if (item.kind === "completed") {
-                      actions.setActiveTab("archive");
-                      return;
-                    }
-                    actions.selectOutcome(summary.outcome.id);
-                    actions.setActiveTab("plan");
-                  }}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0 flex items-center gap-2">
-                      <span className="inline-flex h-3 w-3 rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-elevated)]" />
-                      <div className="truncate text-sm font-semibold">{summary.outcome.title}</div>
-                    </div>
-                    <div
-                      className={cn(
-                        "rounded-[0.55rem] border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]",
-                        item.kind === "completed" ? trafficLightSurfaceClass("green") : trafficLightSurfaceClass(summary.phaseTone)
-                      )}
-                    >
-                      {copy.label}
-                    </div>
-                  </div>
-
-                  <div className="mt-2 flex items-center justify-between gap-3 text-xs text-[color:var(--app-text)] opacity-80">
-                    <div className="truncate">{copy.detail}</div>
-                    <div className="text-right">
-                      <span className="font-semibold">{summary.progressPercent}%</span>
-                      <span className="ml-2 opacity-70">{summary.doneElapsed}/{summary.elapsedTotal || 0}</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-3">
-                    <Progress value={summary.progressValue} tone={summary.phaseTone} className="h-2 rounded-[0.35rem]" />
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[color:var(--app-text)] opacity-70">
-                    <span>{pluralize(summary.activeDates.length, "day")}</span>
-                    <span>{item.kind === "completed" ? "In Victory Wall" : `${pluralize(summary.openDaysLeft, "open day")} left`}</span>
-                    <span>{pluralize(summary.monthCount, "month")}</span>
-                  </div>
-                </button>
-              );
-            })
-          ) : (
-            <div className="rounded-[0.8rem] border border-dashed border-[color:var(--app-border)] px-4 py-5 text-sm app-muted">
-              No outcomes match this search.
-            </div>
-          )}
-        </div>
-      </Card>
-    </div>
+      ) : null}
+    </Card>
   );
 }

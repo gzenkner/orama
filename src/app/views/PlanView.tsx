@@ -6,6 +6,7 @@ import {
   formatDaysOfWeek,
   dayNumberToISO,
   formatMonthLabel,
+  formatShortDate,
   formatWeekLabel,
   isoToDayNumber,
   isDateActive,
@@ -16,10 +17,12 @@ import {
   toISODate,
   weekStartsForMonth
 } from "../date";
+import { summarizePlanningActions } from "../planningActions";
 import Button from "../ui/Button";
 import Card from "../ui/Card";
 import Input from "../ui/Input";
-import Progress from "../ui/Progress";
+import Textarea from "../ui/Textarea";
+import { cn } from "../ui/cn";
 import {
   dayFillVar,
   daySurfaceClass,
@@ -27,12 +30,21 @@ import {
   entryHasPlan,
   trafficLightSurfaceClass,
   trafficLightToneFromProgress,
-  trafficLightVar
+  trafficLightVar,
+  type DayVisualState,
+  type TrafficLightTone
 } from "../ui/trafficLight";
+
+const MAX_PLAN_MONTHS = 150;
 
 function dayTabLabel(dateISO: string) {
   const d = parseISODate(dateISO);
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function compactMonthLabel(monthKey: string): string {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: "short", year: "2-digit" });
 }
 
 function todayISO(): string {
@@ -175,10 +187,10 @@ function TimelineYardstick({
   }
 
   return (
-    <div className="rounded-[0.7rem] border border-[color:var(--app-border)] bg-[color:var(--app-elevated)] px-2 py-3 sm:px-3">
+    <div className="outcome-header-timeline-body">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <div className="app-kicker">Timeline</div>
+          <div className="app-kicker">Navigate</div>
           <div className="mt-1 text-xs app-muted">It zooms in as you expand months and weeks.</div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
@@ -187,7 +199,7 @@ function TimelineYardstick({
           </Button>
           <div className="flex flex-wrap items-center gap-3 text-[11px] app-muted">
             <div className="flex items-center gap-2">
-              <span className="inline-block h-2 w-2 rounded-full bg-[color:var(--app-border)]" /> Open
+              <span className="inline-block h-2 w-2 rounded-full bg-[color:var(--outcome-border)]" /> Open
             </div>
             <div className="flex items-center gap-2">
               <span className="inline-block h-2 w-2 rounded-full" style={{ background: trafficLightVar("red", "fill") }} /> Missed
@@ -202,13 +214,13 @@ function TimelineYardstick({
         </div>
       </div>
 
-      <svg className="mt-3 h-[6.75rem] w-full sm:h-[7.5rem]" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Timeline">
+      <svg className="mt-3 h-[6.75rem] w-full sm:h-[7.5rem]" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Navigate outcome plan">
         <line
           x1={pad}
           y1={y}
           x2={width - pad}
           y2={y}
-          stroke="var(--app-border)"
+          stroke="var(--outcome-border)"
           strokeWidth={2}
           opacity={0.5}
         />
@@ -227,7 +239,7 @@ function TimelineYardstick({
                 y1={y}
                 x2={x1 + len}
                 y2={y}
-                stroke="var(--app-border)"
+                stroke="var(--outcome-border)"
                 strokeWidth={12}
                 strokeLinecap="round"
                 opacity={0.3}
@@ -271,7 +283,13 @@ function TimelineYardstick({
               ) : null}
 
               {wideEnough ? (
-                <text x={labelX} y={y + 34} textAnchor="middle" fill="var(--app-subtle)" fontSize={12}>
+                <text
+                  x={labelX}
+                  y={y + 34}
+                  textAnchor="middle"
+                  fill="color-mix(in srgb, var(--outcome-ink) 58%, var(--app-subtle) 42%)"
+                  fontSize={12}
+                >
                   {monthLabel(m.monthKey)}
                 </text>
               ) : null}
@@ -295,7 +313,7 @@ function TimelineYardstick({
             if (dn < startDay || dn > endDay) return null;
             const x = xForDay(dn);
             const title = weekly[`${outcome.id}:${monthKey}:${weekStartISO}`]?.title?.trim() ?? "";
-            const tick = title ? trafficLightVar("amber", "fill") : "var(--app-border)";
+            const tick = title ? trafficLightVar("amber", "fill") : "var(--outcome-border)";
             return (
               <g key={`${monthKey}:${weekStartISO}`}>
                 <line
@@ -349,11 +367,11 @@ function TimelineYardstick({
               y1={y - 36}
               x2={xForDay(todayDay)}
               y2={y + 28}
-              stroke="var(--app-text)"
+              stroke="var(--outcome-ink)"
               strokeWidth={2}
               opacity={0.7}
             />
-            <text x={xForDay(todayDay)} y={y + 46} textAnchor="middle" fill="var(--app-text)" fontSize={11}>
+            <text x={xForDay(todayDay)} y={y + 46} textAnchor="middle" fill="var(--outcome-ink)" fontSize={11}>
               Today
             </text>
           </g>
@@ -378,35 +396,172 @@ function Arrow({ dir }: { dir: "left" | "right" }) {
   );
 }
 
+function dailyItems(entry: DailyGoal | undefined): string[] {
+  if (Array.isArray(entry?.items) && entry.items.length) return entry.items;
+  return [entry?.title ?? ""];
+}
+
+function dailyItemsDone(entry: DailyGoal | undefined, items: string[]): boolean[] {
+  const raw = Array.isArray(entry?.itemsDone) ? entry.itemsDone : [];
+  return items.map((_, index) => Boolean(raw[index]));
+}
+
+function meaningfulItemCount(items: string[]): number {
+  return items.reduce((count, item) => count + (item.trim().length > 0 ? 1 : 0), 0);
+}
+
+function completedItemCount(itemsDone: boolean[]): number {
+  return itemsDone.reduce((count, done) => count + (done ? 1 : 0), 0);
+}
+
+function populatedGoalCount(values: string[]): number {
+  return values.reduce((count, value) => count + (value.trim().length > 0 ? 1 : 0), 0);
+}
+
+function currentReviewCycle(date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function daysUntilNextMonthlyReview(date = new Date()): number {
+  const next = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.max(0, Math.ceil((next.getTime() - date.getTime()) / msPerDay));
+}
+
+function dayStateLabel(state: DayVisualState): string {
+  if (state === "done") return "Done";
+  if (state === "planned") return "Planned";
+  if (state === "missed") return "Missed";
+  if (state === "future") return "Future";
+  return "Open";
+}
+
+function goalCoverageTone(done: number, total: number): TrafficLightTone {
+  if (total > 0 && done >= total) return "green";
+  if (done > 0) return "amber";
+  return "red";
+}
+
+function GoalCoverageRing({ done, total, label }: { done: number; total: number; label: string }) {
+  const ratio = total ? done / total : 0;
+  const tone = goalCoverageTone(done, total);
+  const radius = 22;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - ratio);
+
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="flex shrink-0 flex-col items-center">
+        <div className="relative h-14 w-14">
+          <svg viewBox="0 0 64 64" className="h-full w-full -rotate-90">
+            <circle cx="32" cy="32" r={radius} fill="none" stroke="var(--app-border)" strokeWidth="6" opacity="0.35" />
+            <circle
+            cx="32"
+            cy="32"
+            r={radius}
+            fill="none"
+            stroke={trafficLightVar(tone, "fill")}
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+          <div className="text-sm font-semibold leading-none">{done}/{total}</div>
+        </div>
+        </div>
+        <div className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] app-subtle">{label}</div>
+      </div>
+      <div className={cn("rounded-[0.7rem] border px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap", trafficLightSurfaceClass(tone))}>
+        {done >= total ? "Complete" : done > 0 ? "In progress" : "Start here"}
+      </div>
+    </div>
+  );
+}
+
+function weekStartISOsForOutcomeMonth(outcome: Outcome, monthKey: string, weekStartsOn: WeekStartsOn): string[] {
+  return weekStartsForMonth(monthKey, weekStartsOn).filter(
+    (weekStartISO) => daysForWeekInMonth(weekStartISO, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek).length > 0
+  );
+}
+
+function preferredWeekStartForMonth(
+  outcome: Outcome,
+  monthKey: string,
+  weekStartsOn: WeekStartsOn,
+  preferredDateISO?: string | null
+): string | null {
+  const weekStarts = weekStartISOsForOutcomeMonth(outcome, monthKey, weekStartsOn);
+  if (!weekStarts.length) return null;
+  if (!preferredDateISO) return weekStarts[0] ?? null;
+
+  const preferredWeekStart = toISODate(startOfWeek(parseISODate(preferredDateISO), weekStartsOn));
+  if (weekStarts.includes(preferredWeekStart)) return preferredWeekStart;
+
+  const next = weekStarts.find((weekStartISO) => weekStartISO >= preferredWeekStart);
+  if (next) return next;
+  return weekStarts[weekStarts.length - 1] ?? null;
+}
+
+function preferredDayForWeek(
+  outcome: Outcome,
+  monthKey: string,
+  weekStartISO: string,
+  preferredDateISO?: string | null
+): string | null {
+  const days = daysForWeekInMonth(weekStartISO, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek);
+  if (!days.length) return null;
+  if (!preferredDateISO) return days[0] ?? null;
+  if (days.includes(preferredDateISO)) return preferredDateISO;
+
+  const next = days.find((dateISO) => dateISO >= preferredDateISO);
+  if (next) return next;
+  return days[days.length - 1] ?? null;
+}
+
 function focusForOutcome(
   outcome: Outcome | null | undefined,
   monthKeys: string[],
   weekStartsOn: WeekStartsOn
-): { monthKey: string | null; weekKey: string | null } {
-  if (!outcome) return { monthKey: null, weekKey: null };
-  if (!monthKeys.length) return { monthKey: null, weekKey: null };
+): { monthKey: string | null; weekKey: string | null; dateISO: string | null } {
+  if (!outcome) return { monthKey: null, weekKey: null, dateISO: null };
+  if (!monthKeys.length) return { monthKey: null, weekKey: null, dateISO: null };
 
-  const today = parseISODate(todayISO());
+  const today = todayISO();
+  const todayDate = parseISODate(today);
   const start = parseISODate(outcome.startDate);
   const end = parseISODate(outcome.endDate);
 
   let monthKey = monthKeys[0] ?? null;
-  if (today.getTime() >= start.getTime() && today.getTime() <= end.getTime()) {
-    const m = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  if (todayDate.getTime() >= start.getTime() && todayDate.getTime() <= end.getTime()) {
+    const m = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, "0")}`;
     if (monthKeys.includes(m)) monthKey = m;
   }
 
-  if (!monthKey) return { monthKey, weekKey: null };
-  const weekStart = toISODate(startOfWeek(today, weekStartsOn));
-  return { monthKey, weekKey: `${monthKey}:${weekStart}` };
+  if (!monthKey) return { monthKey, weekKey: null, dateISO: null };
+
+  const weekStartISO = preferredWeekStartForMonth(outcome, monthKey, weekStartsOn, today);
+  const dateISO = weekStartISO ? preferredDayForWeek(outcome, monthKey, weekStartISO, today) : null;
+  return {
+    monthKey,
+    weekKey: weekStartISO ? `${monthKey}:${weekStartISO}` : null,
+    dateISO
+  };
 }
 
 export type PlanNavigation = {
   monthKeys: string[];
+  yearKeys: string[];
+  activeYearKey: string | null;
   activeMonthKey: string | null;
+  activeWeekKey: string | null;
+  activeWeekStartISO: string | null;
+  activeDateISO: string | null;
   expandedMonths: Set<string>;
   expandedWeekKeys: Set<string>;
   allExpanded: boolean;
+  goToYear: (yearKey: string) => void;
   goToMonth: (monthKey: string) => void;
   goToWeek: (monthKey: string, weekStartISO: string) => void;
   goToDay: (monthKey: string, weekStartISO: string, dateISO: string) => void;
@@ -418,10 +573,14 @@ export type PlanNavigation = {
 
 export function usePlanNavigation(outcome: Outcome | null | undefined, weekStartsOn: WeekStartsOn): PlanNavigation {
   const monthKeys = React.useMemo(
-    () => (outcome ? monthKeysInRange(outcome.startDate, outcome.endDate) : []),
+    () => (outcome ? monthKeysInRange(outcome.startDate, outcome.endDate).slice(0, MAX_PLAN_MONTHS) : []),
     [outcome?.startDate, outcome?.endDate]
   );
+  const yearKeys = React.useMemo(() => Array.from(new Set(monthKeys.slice(24).map((monthKey) => monthKey.slice(0, 4)))), [monthKeys]);
   const [focusedMonth, setFocusedMonth] = React.useState<string | null>(null);
+  const [focusedYearKey, setFocusedYearKey] = React.useState<string | null>(null);
+  const [focusedWeekKey, setFocusedWeekKey] = React.useState<string | null>(null);
+  const [focusedDateISO, setFocusedDateISO] = React.useState<string | null>(null);
 
   const [expandedMonths, setExpandedMonths] = React.useState<Set<string>>(() => {
     const { monthKey } = focusForOutcome(outcome, monthKeys, weekStartsOn);
@@ -434,18 +593,21 @@ export function usePlanNavigation(outcome: Outcome | null | undefined, weekStart
   });
 
   React.useEffect(() => {
-    const { monthKey, weekKey } = focusForOutcome(outcome, monthKeys, weekStartsOn);
+    const { monthKey, weekKey, dateISO } = focusForOutcome(outcome, monthKeys, weekStartsOn);
+    const currentYear = String(parseISODate(todayISO()).getFullYear());
+    const preferredYearKey = yearKeys.includes(currentYear) ? currentYear : yearKeys[0] ?? null;
     setExpandedMonths(monthKey ? new Set([monthKey]) : new Set());
     setExpandedWeekKeys(weekKey ? new Set([weekKey]) : new Set());
     setFocusedMonth(monthKey);
-  }, [outcome?.id, outcome?.startDate, outcome?.endDate, monthKeys, weekStartsOn]);
+    setFocusedYearKey(preferredYearKey);
+    setFocusedWeekKey(weekKey);
+    setFocusedDateISO(dateISO);
+  }, [outcome?.id, outcome?.startDate, outcome?.endDate, monthKeys, weekStartsOn, yearKeys]);
 
   const allWeekKeys = React.useMemo(() => {
     if (!outcome) return [];
     return monthKeys.flatMap((monthKey) =>
-      weekStartsForMonth(monthKey, weekStartsOn)
-        .filter((weekStartISO) => daysForWeekInMonth(weekStartISO, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek).length > 0)
-        .map((weekStartISO) => `${monthKey}:${weekStartISO}`)
+      weekStartISOsForOutcomeMonth(outcome, monthKey, weekStartsOn).map((weekStartISO) => `${monthKey}:${weekStartISO}`)
     );
   }, [monthKeys, outcome, weekStartsOn]);
 
@@ -455,21 +617,75 @@ export function usePlanNavigation(outcome: Outcome | null | undefined, weekStart
     return focusForOutcome(outcome, monthKeys, weekStartsOn).monthKey;
   }, [expandedMonths, focusedMonth, monthKeys, outcome, weekStartsOn]);
 
+  const activeWeekStartISO = React.useMemo(() => {
+    if (!outcome || !activeMonthKey) return null;
+    const weekStarts = weekStartISOsForOutcomeMonth(outcome, activeMonthKey, weekStartsOn);
+    if (!weekStarts.length) return null;
+
+    const [focusedWeekMonthKey, focusedWeekStart] = focusedWeekKey?.split(":") ?? [];
+    if (focusedWeekMonthKey === activeMonthKey && focusedWeekStart && weekStarts.includes(focusedWeekStart)) return focusedWeekStart;
+
+    return preferredWeekStartForMonth(outcome, activeMonthKey, weekStartsOn, focusedDateISO ?? todayISO());
+  }, [activeMonthKey, focusedDateISO, focusedWeekKey, outcome, weekStartsOn]);
+
+  const activeWeekKey = activeMonthKey && activeWeekStartISO ? `${activeMonthKey}:${activeWeekStartISO}` : null;
+  const activeYearKey = React.useMemo(() => {
+    if (focusedYearKey && yearKeys.includes(focusedYearKey)) return focusedYearKey;
+    if (activeMonthKey && yearKeys.includes(activeMonthKey.slice(0, 4))) return activeMonthKey.slice(0, 4);
+    return yearKeys[0] ?? null;
+  }, [activeMonthKey, focusedYearKey, yearKeys]);
+
+  const activeDateISO = React.useMemo(() => {
+    if (!outcome || !activeMonthKey || !activeWeekStartISO) return null;
+    return preferredDayForWeek(outcome, activeMonthKey, activeWeekStartISO, focusedDateISO ?? todayISO());
+  }, [activeMonthKey, activeWeekStartISO, focusedDateISO, outcome]);
+
   const allExpanded = monthKeys.length > 0 && expandedMonths.size === monthKeys.length && expandedWeekKeys.size === allWeekKeys.length;
 
   function scrollToMonth(monthKey: string) {
     const el = document.getElementById(`month-${monthKey}`);
-    el?.scrollIntoView({ block: "start", behavior: "smooth" });
+    el?.scrollIntoView({ block: "nearest", inline: "start", behavior: "smooth" });
   }
 
   function goToMonth(monthKey: string) {
+    const weekStartISO = outcome ? preferredWeekStartForMonth(outcome, monthKey, weekStartsOn, focusedDateISO ?? todayISO()) : null;
+    const dateISO = outcome && weekStartISO ? preferredDayForWeek(outcome, monthKey, weekStartISO, focusedDateISO ?? todayISO()) : null;
     setFocusedMonth(monthKey);
+    const yearKey = monthKey.slice(0, 4);
+    if (yearKeys.includes(yearKey)) setFocusedYearKey(yearKey);
+    setFocusedWeekKey(weekStartISO ? `${monthKey}:${weekStartISO}` : null);
+    setFocusedDateISO(dateISO);
     setExpandedMonths((prev) => new Set([...prev, monthKey]));
+    if (weekStartISO) {
+      setExpandedWeekKeys((prev) => new Set([...prev, `${monthKey}:${weekStartISO}`]));
+    }
     requestAnimationFrame(() => scrollToMonth(monthKey));
   }
 
+  function goToYear(yearKey: string) {
+    if (!yearKeys.includes(yearKey)) return;
+    const firstMonthInYear = monthKeys.find((monthKey) => monthKey.startsWith(`${yearKey}-`)) ?? null;
+    const weekStartISO = outcome && firstMonthInYear ? preferredWeekStartForMonth(outcome, firstMonthInYear, weekStartsOn, todayISO()) : null;
+    const dateISO = outcome && firstMonthInYear && weekStartISO ? preferredDayForWeek(outcome, firstMonthInYear, weekStartISO, todayISO()) : null;
+    setFocusedYearKey(yearKey);
+    setFocusedMonth(firstMonthInYear);
+    setFocusedWeekKey(firstMonthInYear && weekStartISO ? `${firstMonthInYear}:${weekStartISO}` : null);
+    setFocusedDateISO(dateISO);
+    if (firstMonthInYear) {
+      setExpandedMonths((prev) => new Set([...prev, firstMonthInYear]));
+      if (weekStartISO) setExpandedWeekKeys((prev) => new Set([...prev, `${firstMonthInYear}:${weekStartISO}`]));
+    }
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`year-${yearKey}`);
+      el?.scrollIntoView({ block: "nearest", inline: "start", behavior: "smooth" });
+    });
+  }
+
   function goToWeek(monthKey: string, weekStartISO: string) {
+    const dateISO = outcome ? preferredDayForWeek(outcome, monthKey, weekStartISO, focusedDateISO ?? todayISO()) : null;
     setFocusedMonth(monthKey);
+    setFocusedWeekKey(`${monthKey}:${weekStartISO}`);
+    setFocusedDateISO(dateISO);
     setExpandedMonths((prev) => new Set([...prev, monthKey]));
     setExpandedWeekKeys((prev) => new Set([...prev, `${monthKey}:${weekStartISO}`]));
     requestAnimationFrame(() => {
@@ -480,6 +696,8 @@ export function usePlanNavigation(outcome: Outcome | null | undefined, weekStart
 
   function goToDay(monthKey: string, weekStartISO: string, dateISO: string) {
     setFocusedMonth(monthKey);
+    setFocusedWeekKey(`${monthKey}:${weekStartISO}`);
+    setFocusedDateISO(dateISO);
     setExpandedMonths((prev) => new Set([...prev, monthKey]));
     setExpandedWeekKeys((prev) => new Set([...prev, `${monthKey}:${weekStartISO}`]));
     requestAnimationFrame(() => {
@@ -531,10 +749,16 @@ export function usePlanNavigation(outcome: Outcome | null | undefined, weekStart
 
   return {
     monthKeys,
+    yearKeys,
+    activeYearKey,
     activeMonthKey,
+    activeWeekKey,
+    activeWeekStartISO,
+    activeDateISO,
     expandedMonths,
     expandedWeekKeys,
     allExpanded,
+    goToYear,
     goToMonth,
     goToWeek,
     goToDay,
@@ -556,82 +780,117 @@ export default function PlanView({
   weekStartsOn: WeekStartsOn;
   navigation: PlanNavigation;
 }) {
+  const yearly = useAppState((s) => s.yearly);
   const monthly = useAppState((s) => s.monthly);
   const weekly = useAppState((s) => s.weekly);
   const daily = useAppState((s) => s.daily);
-  const showMonthlyObjectives = useAppState((s) => s.ui.showMonthlyObjectives);
-  const showWeeklyObjectives = useAppState((s) => s.ui.showWeeklyObjectives);
   const today = todayISO();
-  const elapsedCutoffISO = lastFullyElapsedDateISO();
-  const { monthKeys, activeMonthKey, expandedMonths, expandedWeekKeys, allExpanded, goToMonth, goToWeek, goToDay, goRelativeMonth, toggleMonth, toggleWeek, toggleAll } =
-    navigation;
+  const {
+    monthKeys,
+    yearKeys,
+    activeYearKey,
+    activeMonthKey,
+    activeWeekStartISO,
+    activeDateISO,
+    goToYear,
+    goToMonth,
+    goToWeek,
+    goToDay,
+    goRelativeMonth
+  } = navigation;
+  const planningActions = React.useMemo(
+    () => summarizePlanningActions(outcome, { yearly, monthly, weekly }, weekStartsOn),
+    [monthly, outcome, weekStartsOn, weekly, yearly]
+  );
+  const isLongPlan = planningActions.category === "long";
+  const reviewCycle = currentReviewCycle();
+  const daysToNextReview = daysUntilNextMonthlyReview();
+  const activeMonthIndex = activeMonthKey ? monthKeys.indexOf(activeMonthKey) : -1;
+  const selectedMonthKey = activeMonthKey ?? monthKeys[0] ?? null;
+  const selectedYearKey = activeYearKey && yearKeys.includes(activeYearKey) ? activeYearKey : yearKeys[0] ?? null;
+  const selectedYearTitle = selectedYearKey ? yearly[`${outcome.id}:${selectedYearKey}`]?.title ?? "" : "";
+  const yearSummaries = yearKeys.map((yearKey) => ({
+    yearKey,
+    title: yearly[`${outcome.id}:${yearKey}`]?.title?.trim() ?? ""
+  }));
+  const yearGoalsSet = yearSummaries.reduce((count, summary) => count + (summary.title ? 1 : 0), 0);
+  const monthGoalValues = monthKeys.map((monthKey) => monthly[`${outcome.id}:${monthKey}`]?.title ?? "");
+  const monthGoalsSet = populatedGoalCount(monthGoalValues);
+  const monthGoalsReviewed = monthKeys.reduce((count, monthKey) => {
+    const goal = monthly[`${outcome.id}:${monthKey}`];
+    return count + (goal?.title?.trim().length && goal.reviewedCycle === reviewCycle ? 1 : 0);
+  }, 0);
+  const monthGoalsStale = monthKeys.reduce((count, monthKey) => {
+    const goal = monthly[`${outcome.id}:${monthKey}`];
+    return count + (goal?.title?.trim().length && goal.reviewedCycle !== reviewCycle ? 1 : 0);
+  }, 0);
+  const monthCoverageTone = goalCoverageTone(monthGoalsReviewed, monthKeys.length);
+  const primaryCoverageTone = isLongPlan ? goalCoverageTone(yearGoalsSet, yearKeys.length) : monthCoverageTone;
+  const selectedMonthGoal = selectedMonthKey ? monthly[`${outcome.id}:${selectedMonthKey}`] : undefined;
+  const selectedMonthTitle = selectedMonthGoal?.title ?? "";
+  const selectedMonthReviewed = Boolean(selectedMonthGoal?.title?.trim() && selectedMonthGoal.reviewedCycle === reviewCycle);
+  const selectedWeekStarts = selectedMonthKey ? weekStartISOsForOutcomeMonth(outcome, selectedMonthKey, weekStartsOn) : [];
+  const selectedWeekStartISO =
+    activeWeekStartISO && selectedWeekStarts.includes(activeWeekStartISO) ? activeWeekStartISO : selectedWeekStarts[0] ?? null;
+  const selectedWeekDays =
+    selectedMonthKey && selectedWeekStartISO
+      ? daysForWeekInMonth(selectedWeekStartISO, selectedMonthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek)
+      : [];
 
-  function monthProgress(monthKey: string): { done: number; total: number } {
-    const weekStarts = weekStartsForMonth(monthKey, weekStartsOn);
-    const monthDays: string[] = [];
-    for (const ws of weekStarts) {
-      const days = daysForWeekInMonth(ws, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek);
-      monthDays.push(...days);
-    }
-    return elapsedProgress(monthDays, outcome.id, daily, elapsedCutoffISO);
+  const monthSummaries = monthKeys.map((monthKey) => {
+    const weeks = weekStartISOsForOutcomeMonth(outcome, monthKey, weekStartsOn);
+    const weekGoalsSet = weeks.reduce((count, weekStartISO) => {
+      const title = weekly[`${outcome.id}:${monthKey}:${weekStartISO}`]?.title?.trim() ?? "";
+      return count + (title ? 1 : 0);
+    }, 0);
+    const days = weeks.flatMap((weekStartISO) => daysForWeekInMonth(weekStartISO, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek));
+    const daysPlanned = days.reduce((count, dateISO) => count + (entryHasPlan(daily[`${outcome.id}:${dateISO}`]) ? 1 : 0), 0);
+    const goal = monthly[`${outcome.id}:${monthKey}`];
+    return {
+      monthKey,
+      weeks,
+      weekGoalsSet,
+      days,
+      daysPlanned,
+      title: goal?.title?.trim() ?? "",
+      reviewed: Boolean(goal?.title?.trim() && goal.reviewedCycle === reviewCycle)
+    };
+  });
+
+  function jumpToToday() {
+    const start = parseISODate(outcome.startDate);
+    const end = parseISODate(outcome.endDate);
+    const current = parseISODate(today);
+    if (current.getTime() < start.getTime() || current.getTime() > end.getTime()) return;
+    if (!isDateActive(today, outcome.daysOfWeek)) return;
+    const monthKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}`;
+    const weekStartISO = toISODate(startOfWeek(current, weekStartsOn));
+    goToDay(monthKey, weekStartISO, today);
+  }
+
+  function selectYear(yearKey: string) {
+    goToYear(yearKey);
   }
 
   return (
-    <div className="grid gap-3">
-      <Card className="app-card-soft rounded-[0.9rem] p-3 sm:p-4">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="app-kicker">Plan</div>
-            <div className="font-display mt-1.5 text-base font-semibold sm:text-[1.05rem]">Outcome to month to week to day.</div>
-            <div className="mt-1 text-xs leading-5 app-muted sm:text-sm">
-              Use the month strip and the open cards below to move quickly.
+    <div className="app-plan-view grid min-w-0 gap-3 overflow-hidden sm:gap-4">
+      <Card className="app-plan-stage min-w-0 overflow-hidden rounded-[0.95rem] p-4 sm:rounded-[1rem] sm:p-6">
+        <div className="app-plan-hero flex flex-wrap items-start justify-between gap-3 sm:gap-4">
+          <div className="app-plan-hero-copy max-w-3xl min-w-0">
+            <div className="app-kicker">{isLongPlan ? "Yearly Goals First" : "Monthly Goals First"}</div>
+            <div className="font-display mt-1.5 text-[1.12rem] font-semibold leading-tight sm:mt-2 sm:text-[1.55rem]">
+              Set the next layer.
             </div>
-            <div className="mt-1 text-[11px] app-muted">Active days: {formatDaysOfWeek(outcome.daysOfWeek)}</div>
+            <div className="app-plan-rule-copy mt-2 text-[13px] leading-5 app-muted sm:text-sm sm:leading-6">
+              Months 1-6 need month and week goals. Months 7-24 need month goals. Month 25 onward needs year goals.
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant={showMonthlyObjectives ? "secondary" : "ghost"}
-              aria-pressed={showMonthlyObjectives}
-              onClick={() => actions.toggleShowMonthlyObjectives()}
-              title="Toggle showing monthly objectives in the collapsed month rows"
-            >
-              {showMonthlyObjectives ? "Monthly objectives: on" : "Monthly objectives: off"}
-            </Button>
-            <Button
-              size="sm"
-              variant={showWeeklyObjectives ? "secondary" : "ghost"}
-              aria-pressed={showWeeklyObjectives}
-              onClick={() => actions.toggleShowWeeklyObjectives()}
-              title="Toggle showing weekly objectives in the collapsed week rows"
-            >
-              {showWeeklyObjectives ? "Weekly objectives: on" : "Weekly objectives: off"}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                const today = todayISO();
-                const start = parseISODate(outcome.startDate);
-                const end = parseISODate(outcome.endDate);
-                const t = parseISODate(today);
-                if (t.getTime() < start.getTime() || t.getTime() > end.getTime()) return;
-                if (!isDateActive(today, outcome.daysOfWeek)) return;
-                const monthKey = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`;
-                const weekStart = toISODate(startOfWeek(t, weekStartsOn));
-                goToDay(monthKey, weekStart, today);
-              }}
-            >
+          <div className="app-plan-hero-actions flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <Button size="sm" variant="ghost" onClick={jumpToToday}>
               Jump to today
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label="Previous month"
-              onClick={() => goRelativeMonth(-1)}
-              disabled={!activeMonthKey || monthKeys.indexOf(activeMonthKey) <= 0}
-            >
+            <Button size="sm" variant="ghost" aria-label="Previous month" onClick={() => goRelativeMonth(-1)} disabled={activeMonthIndex <= 0}>
               <Arrow dir="left" />
             </Button>
             <Button
@@ -639,295 +898,280 @@ export default function PlanView({
               variant="ghost"
               aria-label="Next month"
               onClick={() => goRelativeMonth(1)}
-              disabled={!activeMonthKey || monthKeys.indexOf(activeMonthKey) >= monthKeys.length - 1}
+              disabled={activeMonthIndex < 0 || activeMonthIndex >= monthKeys.length - 1}
             >
               <Arrow dir="right" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={toggleAll}
-            >
-              {allExpanded ? "Collapse all" : "Expand all"}
             </Button>
           </div>
         </div>
 
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-          {monthKeys.map((monthKey) => {
-            const active = activeMonthKey === monthKey;
-            const { done, total } = monthProgress(monthKey);
-            const tone = total ? trafficLightToneFromProgress(done / total) : null;
+        <div className="app-plan-summary mt-4 grid gap-3 rounded-[0.85rem] border border-[color:var(--outcome-border)] bg-[color:var(--app-card)] p-3 sm:mt-5 sm:rounded-[0.9rem] sm:p-4 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center">
+          <GoalCoverageRing done={isLongPlan ? yearGoalsSet : monthGoalsSet} total={isLongPlan ? yearKeys.length : monthKeys.length} label={isLongPlan ? "years" : "months"} />
+          <div className="min-w-0">
+            <div className={cn("inline-flex rounded-full border px-3 py-1 text-xs font-semibold", trafficLightSurfaceClass(primaryCoverageTone))}>
+              {isLongPlan ? `${yearGoalsSet} of ${yearKeys.length} year goals populated` : `${monthGoalsSet} of ${monthKeys.length} month goals populated`}
+            </div>
+            <div className="mt-2 text-[13px] leading-5 app-muted sm:text-sm sm:leading-6">
+              {isLongPlan
+                ? planningActions.years.outstanding > 0
+                  ? `${planningActions.years.outstanding} year goal${planningActions.years.outstanding === 1 ? "" : "s"} still need defining.`
+                  : "All year goals are defined. Use the monthly plan for detail."
+                : monthGoalsReviewed >= monthKeys.length
+                  ? "All month goals reviewed this month."
+                  : monthGoalsStale > 0
+                    ? `${monthGoalsStale} month goal${monthGoalsStale === 1 ? "" : "s"} need review this month.`
+                    : "Start here. Set each month before getting precise."}
+            </div>
+          </div>
+          <div className="flex items-center lg:justify-end">
+            <div className="app-plan-summary-tile rounded-[0.9rem] border border-[color:var(--outcome-border)] bg-[color:var(--app-elevated)] px-3 py-2 text-right">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] app-subtle">{isLongPlan ? "Actions left" : "Next review"}</div>
+              <div className="mt-1 text-sm font-semibold">
+                {isLongPlan ? planningActions.outstanding : `${daysToNextReview} day${daysToNextReview === 1 ? "" : "s"}`}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="app-plan-note app-plan-rule-strip mt-4 flex flex-wrap items-center gap-2 rounded-[0.85rem] p-2.5 text-[13px] sm:mt-5 sm:p-3 sm:text-sm">
+          <span className="app-plan-step-index">1</span>
+          <span className="font-semibold">{isLongPlan ? "Year" : "Month"}</span>
+          <span className="app-muted">&gt;</span>
+          <span className="app-plan-step-index">2</span>
+          <span className="font-semibold">{isLongPlan ? "Month" : "Weeks"}</span>
+          <span className="app-muted">&gt;</span>
+          <span className="app-plan-step-index">3</span>
+          <span className="font-semibold">{isLongPlan ? "Weeks" : "Days"}</span>
+          {isLongPlan ? (
+            <>
+              <span className="app-muted">&gt;</span>
+              <span className="app-plan-step-index">4</span>
+              <span className="font-semibold">Days</span>
+            </>
+          ) : null}
+          <span className="min-w-[12rem] flex-1 text-[13px] leading-5 app-muted sm:text-sm sm:leading-6">
+            Short plans require months and weeks. Medium plans add months after month 6. Long plans add year goals after month 24.
+          </span>
+        </div>
+
+        {isLongPlan ? (
+          <>
+            <div className="app-plan-scroll-row app-plan-snap-row app-plan-year-row mt-4 flex gap-3 overflow-x-auto sm:mt-5">
+              {yearSummaries.map((summary) => {
+                const active = summary.yearKey === selectedYearKey;
+                const tone = summary.title ? "green" : "red";
+                return (
+                  <button
+                    key={summary.yearKey}
+                    type="button"
+                    id={`year-${summary.yearKey}`}
+                    className="app-plan-rail-button app-plan-year-slide rounded-[0.85rem] p-2.5 text-left sm:rounded-[0.9rem] sm:p-3"
+                    data-active={active}
+                    onClick={() => selectYear(summary.yearKey)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="app-kicker">{summary.yearKey}</div>
+                        <div className="mt-1 line-clamp-2 text-sm font-semibold">{summary.title || "Set yearly goal"}</div>
+                      </div>
+                      <span className={cn("rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]", trafficLightSurfaceClass(tone))}>
+                        {summary.title ? "Set" : "Open"}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedYearKey ? (
+              <div className="app-plan-lane-card app-plan-year-goal-card mt-4 rounded-[0.9rem] p-3 sm:mt-5 sm:rounded-[1rem] sm:p-4" data-active="true">
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1fr)] lg:items-start">
+                  <div>
+                    <div className="app-kicker">Year goal</div>
+                    <div className="font-display mt-1.5 text-[1.15rem] font-semibold leading-tight sm:mt-2 sm:text-[1.25rem]">{selectedYearKey}</div>
+                    <div className="mt-2 text-[13px] leading-5 app-muted sm:text-sm sm:leading-6">
+                      Set the broad outcome for this year. The monthly plan below should inherit from this.
+                    </div>
+                  </div>
+                  <Textarea
+                    value={selectedYearTitle}
+                    onChange={(event) => actions.setYearlyTitle(outcome.id, selectedYearKey, event.target.value)}
+                    placeholder="What should be true by the end of this year?"
+                    className="app-plan-goal-textarea min-h-[6rem] resize-none rounded-[0.75rem] sm:min-h-[7rem]"
+                  />
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+
+        <div className="app-plan-scroll-row app-plan-snap-row app-plan-month-row mt-4 flex gap-3 overflow-x-auto sm:mt-5">
+          {monthSummaries.map((summary) => {
+            const active = summary.monthKey === selectedMonthKey;
+            const tone = summary.reviewed ? "green" : summary.title ? "amber" : "red";
             return (
               <button
-                key={monthKey}
+                key={summary.monthKey}
                 type="button"
-                className={[
-                  "shrink-0 rounded-[0.6rem] border px-3 py-1.5 text-left text-sm transition",
-                  tone ? trafficLightSurfaceClass(tone) : daySurfaceClass("future"),
-                  active ? "outline outline-1 outline-[color:var(--app-text)]" : "opacity-85 hover:opacity-100"
-                ].join(" ")}
-                onClick={() => goToMonth(monthKey)}
+                id={`month-${summary.monthKey}`}
+                className="app-plan-rail-button app-plan-month-slide rounded-[0.85rem] p-2.5 text-left sm:rounded-[0.9rem] sm:p-3"
+                data-active={active}
+                onClick={() => goToMonth(summary.monthKey)}
               >
-                <div className="font-semibold">{formatMonthLabel(monthKey)}</div>
-                <div className="mt-1 text-[11px] opacity-75">
-                  {total ? `${done}/${total} done` : "Future days only"}
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="app-kicker">{compactMonthLabel(summary.monthKey)}</div>
+                    <div className="mt-1 line-clamp-2 text-sm font-semibold">
+                      {summary.title || "Set monthly goal"}
+                    </div>
+                  </div>
+                  <span className={cn("rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]", trafficLightSurfaceClass(tone))}>
+                    {summary.reviewed ? "Reviewed" : summary.title ? "Review" : "Open"}
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] app-muted">
+                  <div>{summary.weekGoalsSet}/{summary.weeks.length} weeks</div>
+                  <div>{summary.daysPlanned}/{summary.days.length} days</div>
                 </div>
               </button>
             );
           })}
         </div>
 
-      </Card>
+        {selectedMonthKey ? (
+          <div className="app-plan-cascade-grid mt-4 grid min-w-0 items-stretch gap-3 sm:mt-5 sm:gap-4 lg:grid-cols-3">
+            <div className="app-plan-lane-card app-plan-month-goal-card flex min-h-0 flex-col rounded-[0.9rem] p-3 sm:rounded-[1rem] sm:p-4" data-active="true">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="app-kicker">Month goal</div>
+                  <div className="font-display mt-1.5 text-[1.15rem] font-semibold leading-tight sm:mt-2 sm:text-[1.25rem]">{formatMonthLabel(selectedMonthKey)}</div>
+                </div>
+                <span className={cn("rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]", trafficLightSurfaceClass(selectedMonthReviewed ? "green" : selectedMonthTitle.trim() ? "amber" : "red"))}>
+                  {selectedMonthReviewed ? "Reviewed" : selectedMonthTitle.trim() ? "Needs review" : "Open"}
+                </span>
+              </div>
 
-      <div className="grid gap-3 pl-6 sm:pl-8">
-        {monthKeys.map((monthKey) => {
-          const expanded = expandedMonths.has(monthKey);
-          const monthStoreKey = `${outcome.id}:${monthKey}`;
-          const monthTitle = monthly[monthStoreKey]?.title ?? "";
-          const { done, total } = monthProgress(monthKey);
-          const monthRatio = total ? done / total : 0;
-          const monthPercent = Math.round(monthRatio * 100);
-          const monthTone = total ? trafficLightToneFromProgress(monthRatio) : null;
-          const weekStarts = weekStartsForMonth(monthKey, weekStartsOn).filter(
-            (ws) => daysForWeekInMonth(ws, monthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek).length > 0
-          );
+              <div className="mt-3 grid gap-2 sm:mt-4">
+                <div className="app-kicker">Goal for the month</div>
+                <Textarea
+                  value={selectedMonthTitle}
+                  onChange={(event) => actions.setMonthlyTitle(outcome.id, selectedMonthKey, event.target.value)}
+                  placeholder="What needs to be true by the end of this month?"
+                  className="app-plan-goal-textarea min-h-[7rem] resize-none rounded-[0.75rem] sm:min-h-[8.5rem]"
+                />
+              </div>
 
-          return (
-            <Card key={monthKey} id={`month-${monthKey}`} className="overflow-visible rounded-[0.9rem]">
-              <div className="relative">
-                <FinderTab label={formatMonthLabel(monthKey)} className="top-4" />
-                <button
-                  className={[
-                    "flex w-full items-center justify-between gap-3 border-b px-4 py-4 pl-8 text-left transition sm:pl-10",
-                    monthTone ? trafficLightSurfaceClass(monthTone) : daySurfaceClass("future"),
-                    expanded ? "outline outline-1 outline-[color:var(--app-text)]" : "hover:opacity-95"
-                  ].join(" ")}
-                  aria-expanded={expanded}
-                  onClick={() => toggleMonth(monthKey)}
+              <div className="app-plan-note mt-3 rounded-[0.85rem] p-2.5 text-[13px] leading-5 app-muted sm:mt-4 sm:p-3 sm:text-sm sm:leading-6">
+                Review monthly before changing the weekly plan. This keeps the cascade honest instead of letting old goals drift.
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2 sm:mt-4">
+                <Button
+                  size="sm"
+                  variant={selectedMonthReviewed ? "secondary" : "primary"}
+                  disabled={!selectedMonthTitle.trim()}
+                  onClick={() => actions.reviewMonthlyGoal(outcome.id, selectedMonthKey)}
                 >
-                  <div className="min-w-0 grid gap-1">
-                    {showMonthlyObjectives ? (
-                      <div
-                        className={["truncate text-xs", monthTitle.trim() ? "" : "opacity-70"].join(" ")}
-                        title={monthTitle.trim() ? monthTitle : "No monthly objective yet"}
-                      >
-                        Monthly: {monthTitle.trim() ? monthTitle : "-"}
-                      </div>
-                    ) : null}
-                    <div className="text-xs opacity-75">
-                      {total ? `${done}/${total} consistent days` : "Future days only"}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-32">
-                        <Progress value={monthRatio} tone={total ? undefined : "amber"} />
-                      </div>
-                      <div className="w-12 text-right leading-none">
-                        <div className="text-[11px] font-semibold tabular-nums">{monthPercent}%</div>
-                        <div className="mt-1 text-[10px] tabular-nums opacity-70">{done}/{total || 0}</div>
-                      </div>
-                    </div>
-                    <Chevron open={expanded} />
-                  </div>
-                </button>
+                  {selectedMonthReviewed ? "Reviewed this month" : "Review month"}
+                </Button>
+              </div>
+            </div>
 
-                {expanded ? (
-                  <div className="grid gap-3 p-4 pl-8 sm:pl-10">
-                    <div className="grid gap-2">
-                      <div className="app-kicker">Monthly goal</div>
+            <div className="app-plan-lane-card app-plan-week-lane flex min-h-0 flex-col rounded-[0.9rem] p-3 sm:rounded-[1rem] sm:p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="app-kicker">Weekly goals</div>
+                  <div className="mt-1.5 text-[13px] leading-5 app-muted sm:mt-2 sm:text-sm sm:leading-6">Turn the month into useful weekly checkpoints.</div>
+                </div>
+                <span className="app-pill rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]">
+                  {selectedWeekStarts.length} weeks
+                </span>
+              </div>
+
+              <div className="mt-3 grid gap-2.5 sm:mt-4 sm:gap-3">
+                {selectedWeekStarts.map((weekStartISO) => {
+                  const weekKey = `${selectedMonthKey}:${weekStartISO}`;
+                  const active = weekStartISO === selectedWeekStartISO;
+                  const weekDays = daysForWeekInMonth(weekStartISO, selectedMonthKey, outcome.startDate, outcome.endDate, outcome.daysOfWeek);
+                  const plannedDays = weekDays.reduce((count, dateISO) => count + (entryHasPlan(daily[`${outcome.id}:${dateISO}`]) ? 1 : 0), 0);
+                  const title = weekly[`${outcome.id}:${weekKey}`]?.title ?? "";
+                  return (
+                    <div
+                      key={weekStartISO}
+                      id={`week-${selectedMonthKey}-${weekStartISO}`}
+                      className="app-plan-week-card rounded-[0.85rem] p-2.5 sm:rounded-[0.9rem] sm:p-3"
+                      data-active={active}
+                    >
+                      <button type="button" className="w-full text-left" onClick={() => goToWeek(selectedMonthKey, weekStartISO)}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-semibold">{formatWeekLabel(weekStartISO)}</div>
+                          <div className="text-[11px] app-muted">{plannedDays}/{weekDays.length} days</div>
+                        </div>
+                      </button>
                       <Input
-                        value={monthTitle}
-                        onChange={(e) => actions.setMonthlyTitle(outcome.id, monthKey, e.target.value)}
-                        placeholder="What outcome matters most this month?"
+                        value={title}
+                        onFocus={() => goToWeek(selectedMonthKey, weekStartISO)}
+                        onChange={(event) => actions.setWeeklyTitle(outcome.id, selectedMonthKey, weekStartISO, event.target.value)}
+                        placeholder="Weekly checkpoint..."
+                        className="mt-2 h-9 rounded-[0.65rem] border-none bg-[color:var(--app-card)] px-3 text-[13px]"
                       />
                     </div>
-
-                    <div className="grid gap-2 pl-2 sm:pl-3">
-                      <div className="app-kicker">Weekly goals</div>
-                      <div className="grid gap-2">
-                        {weekStarts.map((weekStartISO) => {
-                          const weekKey = `${outcome.id}:${monthKey}:${weekStartISO}`;
-                          const weekTitle = weekly[weekKey]?.title ?? "";
-                          const weekDays = daysForWeekInMonth(
-                            weekStartISO,
-                            monthKey,
-                            outcome.startDate,
-                            outcome.endDate,
-                            outcome.daysOfWeek
-                          );
-                          const expandedWeek = expandedWeekKeys.has(`${monthKey}:${weekStartISO}`);
-                          const expandedWeekKey = `${monthKey}:${weekStartISO}`;
-
-                          const { done: doneDays, total: elapsedWeekDays } = elapsedProgress(weekDays, outcome.id, daily, elapsedCutoffISO);
-                          const weekTone = elapsedWeekDays ? trafficLightToneFromProgress(doneDays / elapsedWeekDays) : null;
-
-                          return (
-                            <Card key={weekKey} id={`week-${monthKey}-${weekStartISO}`} className="overflow-visible rounded-[0.8rem]">
-                              <div className="relative">
-                                <FinderTab label={formatWeekLabel(weekStartISO)} className="top-4" />
-                                <button
-                                  className={[
-                                    "flex w-full items-center justify-between gap-3 border-b px-4 py-4 pl-8 text-left transition sm:pl-10",
-                                    weekTone ? trafficLightSurfaceClass(weekTone) : daySurfaceClass("future"),
-                                    expandedWeek ? "outline outline-1 outline-[color:var(--app-text)]" : "hover:opacity-95"
-                                  ].join(" ")}
-                                  aria-expanded={expandedWeek}
-                                  onClick={() => toggleWeek(expandedWeekKey)}
-                                >
-                                  <div className="min-w-0 grid gap-1">
-                                    {showWeeklyObjectives ? (
-                                      <div
-                                        className={["truncate text-xs", weekTitle.trim() ? "" : "opacity-70"].join(" ")}
-                                        title={weekTitle.trim() ? weekTitle : "No weekly objective yet"}
-                                      >
-                                        Weekly: {weekTitle.trim() ? weekTitle : "-"}
-                                      </div>
-                                    ) : null}
-                                    <div className="text-xs opacity-75">
-                                      {elapsedWeekDays ? `${doneDays}/${elapsedWeekDays} days done` : "Future days only"}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-24">
-                                      <Progress value={elapsedWeekDays ? doneDays / elapsedWeekDays : 0} tone={elapsedWeekDays ? undefined : "amber"} />
-                                    </div>
-                                    <Chevron open={expandedWeek} />
-                                  </div>
-                                </button>
-
-                                {expandedWeek ? (
-                                  <div className="grid gap-3 p-4 pl-8 sm:pl-10">
-                                    <div className="grid gap-2">
-                                      <div className="app-kicker">Weekly goal</div>
-                                      <Input
-                                        value={weekTitle}
-                                        onChange={(e) => actions.setWeeklyTitle(outcome.id, monthKey, weekStartISO, e.target.value)}
-                                        placeholder="What would make this week a win?"
-                                      />
-                                    </div>
-
-                                    <div className="grid gap-2 pl-2 sm:pl-3">
-                                      <div className="flex items-center justify-between gap-3">
-                                        <div className="app-kicker">Daily commitments</div>
-                                        <Button
-                                          size="sm"
-                                          onClick={() => {
-                                            const first = weekDays[0];
-                                            if (!first) return;
-                                            const el = document.getElementById(`day-${first}`);
-                                            el?.scrollIntoView({ block: "center" });
-                                          }}
-                                        >
-                                          First day
-                                        </Button>
-                                      </div>
-
-                                      <div className="grid gap-2">
-                                        {weekDays.map((dateISO) => {
-                                          const dayKey = `${outcome.id}:${dateISO}`;
-                                          const entry = daily[dayKey] ?? { title: "", done: false };
-                                          const entryState = dayVisualState(entry, dateISO, todayISO());
-                                          const items =
-                                            Array.isArray(entry.items) && entry.items.length ? entry.items : [entry.title ?? ""];
-                                          const itemsDone = Array.isArray(entry.itemsDone) ? entry.itemsDone : [];
-                                          return (
-                                            <div
-                                              key={dateISO}
-                                              id={`day-${dateISO}`}
-                                              className={[
-                                                "relative flex flex-col gap-2 rounded-[0.7rem] border p-3 pl-8 sm:flex-row sm:items-start sm:pl-10",
-                                                daySurfaceClass(entryState),
-                                                isToday(dateISO) ? "outline outline-1 outline-[color:var(--app-text)]" : ""
-                                              ].join(" ")}
-                                            >
-                                              <FinderTab label={dayTabLabel(dateISO)} className="top-3" />
-                                              <div className="flex items-center gap-3 sm:shrink-0">
-                                                <button
-                                                  className="app-check inline-flex h-6 w-6 items-center justify-center rounded-[0.45rem] border text-sm font-semibold transition"
-                                                  data-state={entry.done ? "done" : entryHasPlan(entry) ? "planned" : "none"}
-                                                  aria-label={entry.done ? "Mark not done" : "Mark done"}
-                                                  onClick={() => actions.toggleDailyDone(outcome.id, dateISO)}
-                                                >
-                                                  {entry.done ? "x" : ""}
-                                                </button>
-                                              </div>
-                                              <div className="min-w-0 flex-1">
-                                                <div className="grid gap-2">
-                                                  {items.map((t, idx) => {
-                                                    const done = Boolean(itemsDone[idx]);
-                                                    return (
-                                                      <div key={idx} className="flex items-center gap-2">
-                                                        <button
-                                                          type="button"
-                                                          className={[
-                                                            "app-check inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition focus:outline-none",
-                                                            done ? "" : ""
-                                                          ].join(" ")}
-                                                          data-state={done ? "done" : t.trim().length ? "planned" : "none"}
-                                                          aria-label={done ? `Mark task ${idx + 1} not done` : `Mark task ${idx + 1} done`}
-                                                          aria-pressed={done}
-                                                          title={done ? "Mark not done" : "Mark done"}
-                                                          onClick={() => actions.toggleDailyItemDone(outcome.id, dateISO, idx)}
-                                                        >
-                                                          x
-                                                        </button>
-                                                        <Input
-                                                          value={t}
-                                                          onChange={(e) => actions.setDailyItem(outcome.id, dateISO, idx, e.target.value)}
-                                                          placeholder={idx === 0 ? "Daily: the smallest thing you'll actually do." : "Another tiny task..."}
-                                                          className={[
-                                                            "h-9 flex-1 rounded-[0.55rem] px-2 text-[13px]",
-                                                            done ? "line-through opacity-70" : ""
-                                                          ].join(" ")}
-                                                          aria-label={`Daily task ${idx + 1}`}
-                                                        />
-                                                        <button
-                                                          type="button"
-                                                          className="app-ghost-outline inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[0.45rem] text-sm transition focus:outline-none"
-                                                          aria-label={`Delete daily task ${idx + 1}`}
-                                                          title="Delete daily task"
-                                                          onClick={() => actions.removeDailyItem(outcome.id, dateISO, idx)}
-                                                        >
-                                                          -
-                                                        </button>
-                                                      </div>
-                                                    );
-                                                  })}
-                                                  <div className="flex justify-end">
-                                                    <button
-                                                      type="button"
-                                                      className="app-ghost-outline inline-flex h-7 w-7 items-center justify-center rounded-[0.45rem] text-sm transition focus:outline-none"
-                                                      aria-label="Add daily task"
-                                                      title="Add daily task"
-                                                      onClick={() => actions.addDailyItem(outcome.id, dateISO)}
-                                                    >
-                                                      +
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  </div>
-                                ) : null}
-                              </div>
-                            </Card>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
+                  );
+                })}
               </div>
-            </Card>
-          );
-        })}
-      </div>
+            </div>
+
+            <div className="app-plan-lane-card app-plan-day-lane flex min-h-0 flex-col rounded-[0.9rem] p-3 sm:rounded-[1rem] sm:p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="app-kicker">Daily commitments</div>
+                  <div className="mt-1.5 text-[13px] leading-5 app-muted sm:mt-2 sm:text-sm sm:leading-6">
+                    Make the selected week executable, one small commitment at a time.
+                  </div>
+                </div>
+                <span className="app-pill rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]">
+                  {selectedWeekStartISO ? formatWeekLabel(selectedWeekStartISO) : "No week"}
+                </span>
+              </div>
+
+              <div className="mt-3 grid gap-2.5 sm:mt-4">
+                {selectedWeekDays.map((dateISO) => {
+                  const entry = daily[`${outcome.id}:${dateISO}`];
+                  const items = dailyItems(entry);
+                  const active = dateISO === activeDateISO;
+                  const state = dayVisualState(entry, dateISO, today);
+                  return (
+                    <div
+                      key={dateISO}
+                      id={`day-${dateISO}`}
+                      className="app-plan-day-button rounded-[0.8rem] p-2.5 sm:rounded-[0.85rem] sm:p-3"
+                      data-active={active}
+                    >
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-3 text-left"
+                        onClick={() => selectedWeekStartISO && goToDay(selectedMonthKey, selectedWeekStartISO, dateISO)}
+                      >
+                        <div className="text-sm font-semibold">{dayTabLabel(dateISO)}</div>
+                        <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]", daySurfaceClass(state))}>
+                          {dayStateLabel(state)}
+                        </span>
+                      </button>
+                      <Input
+                        value={items[0] ?? ""}
+                        onFocus={() => selectedWeekStartISO && goToDay(selectedMonthKey, selectedWeekStartISO, dateISO)}
+                        onChange={(event) => actions.setDailyItem(outcome.id, dateISO, 0, event.target.value)}
+                        placeholder="Smallest meaningful task..."
+                        className="mt-2 h-9 rounded-[0.65rem] border-none bg-[color:var(--app-card)] px-3 text-[13px]"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Card>
     </div>
   );
 }

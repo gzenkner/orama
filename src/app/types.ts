@@ -2,7 +2,7 @@ export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday ... 6 = Saturda
 
 export type WeekStartsOn = 0 | 1; // 0 = Sunday (US), 1 = Monday
 
-export type AppTab = "overview" | "assistant" | "plan" | "calendar" | "archive" | "settings";
+export type AppTab = "overview" | "assistant" | "plan" | "calendar" | "archive" | "templates" | "settings";
 export type OverviewScope = "global" | "outcome";
 
 export type AppThemeMode = "white" | "black";
@@ -16,6 +16,7 @@ export type Outcome = {
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
   daysOfWeek: DayOfWeek[];
+  consistencyTarget: number;
   themeId: OutcomeThemeId;
   createdAt: string; // ISO
 };
@@ -63,6 +64,12 @@ export type OutcomeCoachThread = {
 
 export type MonthlyGoal = {
   title: string;
+  reviewedAt?: string; // ISO
+  reviewedCycle?: string; // YYYY-MM
+};
+
+export type YearlyGoal = {
+  title: string;
 };
 
 export type WeeklyGoal = {
@@ -92,6 +99,7 @@ export type PersistedStateV1 = {
   };
   outcomes: Outcome[];
   archivedOutcomes: ArchivedOutcome[];
+  yearly: Record<string, YearlyGoal>;
   monthly: Record<string, MonthlyGoal>;
   weekly: Record<string, WeeklyGoal>;
   daily: Record<string, DailyGoal>;

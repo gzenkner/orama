@@ -43,7 +43,6 @@ export default function Modal({ open, onClose, title, children, footer, classNam
       <div className="flex items-start justify-between gap-4 border-b border-[color:var(--app-border)] px-5 py-4">
         <div>
           <div className="font-display text-lg font-semibold">{title}</div>
-          <div className="mt-1 text-xs app-muted">{"Outcome -> monthly -> weekly -> daily"}</div>
         </div>
         <button
           className="app-ghost-outline rounded-[0.45rem] px-2 py-1 text-xs transition"
@@ -52,9 +51,9 @@ export default function Modal({ open, onClose, title, children, footer, classNam
           Esc
         </button>
       </div>
-      <div className="px-5 py-4">{children}</div>
+      <div className="app-modal-body px-5 py-4">{children}</div>
       {footer ? (
-        <div className="flex items-center justify-end gap-2 border-t border-[color:var(--app-border)] px-5 py-4">{footer}</div>
+        <div className="app-modal-footer flex items-center justify-end gap-2 border-t border-[color:var(--app-border)] px-5 py-4">{footer}</div>
       ) : null}
     </dialog>
   );

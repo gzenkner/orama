@@ -93,8 +93,8 @@ function YearCalendar({
   });
 
   return (
-    <div className="grid gap-4">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+    <div className="app-calendar-year grid gap-4">
+      <div className="app-calendar-month-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {months.map((monthIndex) => {
           const monthStart = new Date(year, monthIndex, 1);
           const monthKey = monthKeyFromDate(monthStart);
@@ -104,13 +104,13 @@ function YearCalendar({
           const totalCells = Math.ceil((offset + daysInMonth) / 7) * 7;
 
           return (
-            <Card key={monthIndex} className="rounded-[0.85rem] p-4">
-              <div className="flex items-center justify-between gap-3">
+            <Card key={monthIndex} id={`calendar-month-${monthKey}`} className="app-calendar-month-card rounded-[0.85rem] p-4">
+              <div className="app-calendar-month-head flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold">{formatMonthLabel(monthKey)}</div>
-                <div className="text-xs app-muted">Click a day to check in</div>
+                <div className="app-calendar-month-hint text-xs app-muted">Click a day to check in</div>
               </div>
 
-              <div className="mt-3 grid grid-cols-7 gap-1 text-[11px] app-subtle">
+              <div className="app-calendar-weekdays mt-3 grid grid-cols-7 gap-1 text-[11px] app-subtle">
                 {weekDayLabels.map((label) => (
                   <div key={label} className="flex aspect-square items-center justify-center px-1 py-1 text-center">
                     {label}
@@ -118,7 +118,7 @@ function YearCalendar({
                 ))}
               </div>
 
-              <div className="mt-1 grid grid-cols-7 gap-1">
+              <div className="app-calendar-days mt-1 grid grid-cols-7 gap-1">
                 {Array.from({ length: totalCells }, (_, index) => {
                   const dayNum = index - offset + 1;
                   if (dayNum < 1 || dayNum > daysInMonth) return <div key={index} className="aspect-square rounded-[0.5rem]" />;
@@ -141,7 +141,7 @@ function YearCalendar({
                     <button
                       key={index}
                       className={cn(
-                        "aspect-square w-full rounded-[0.5rem] border text-xs tabular-nums transition",
+                        "app-calendar-day-button aspect-square w-full rounded-[0.5rem] border text-xs tabular-nums transition",
                         styles[state]
                       )}
                       disabled={!active}
@@ -240,7 +240,7 @@ function DayModal({
                     value={title}
                     onChange={(e) => actions.setDailyItem(outcome.id, dateISO, index, e.target.value)}
                     placeholder={index === 0 ? "The smallest slice you can finish today." : "Another tiny task..."}
-                    className={cn("h-10 flex-1 rounded-[0.55rem] px-3 text-[13px]", itemDone ? "line-through opacity-70" : "")}
+                    className={cn("h-10 flex-1 rounded-[0.55rem] px-3 text-[13px]", itemDone ? "opacity-70" : "")}
                     aria-label={`Daily task ${index + 1}`}
                   />
 
@@ -275,17 +275,57 @@ function DayModal({
   );
 }
 
-export default function CalendarView({ outcome, weekStartsOn }: { outcome: Outcome; weekStartsOn: WeekStartsOn }) {
+function preferredCalendarYear(years: number[]): number {
+  const currentYear = new Date().getFullYear();
+  return years.includes(currentYear) ? currentYear : years[0] ?? currentYear;
+}
+
+function isMobileViewport(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
+}
+
+export default function CalendarView({
+  outcome,
+  weekStartsOn,
+  focusCurrentMonthRequest = 0
+}: {
+  outcome: Outcome;
+  weekStartsOn: WeekStartsOn;
+  focusCurrentMonthRequest?: number;
+}) {
   const daily = useAppState((s) => s.daily);
   const years = React.useMemo(() => yearsInRange(outcome.startDate, outcome.endDate), [outcome.endDate, outcome.startDate]);
-  const [year, setYear] = React.useState(years[0] ?? new Date().getFullYear());
+  const yearsKey = years.join(",");
+  const [year, setYear] = React.useState(() => preferredCalendarYear(years));
   const [selectedDay, setSelectedDay] = React.useState<string | null>(null);
   const [dayOpen, setDayOpen] = React.useState(false);
+  const currentMonthKey = monthKeyFromDate(new Date());
+  const currentYear = new Date().getFullYear();
 
   React.useEffect(() => {
     if (years.includes(year)) return;
-    if (years.length) setYear(years[0]);
+    setYear(preferredCalendarYear(years));
   }, [year, years]);
+
+  React.useEffect(() => {
+    setYear(preferredCalendarYear(years));
+  }, [outcome.id, yearsKey, years]);
+
+  React.useEffect(() => {
+    if (!focusCurrentMonthRequest || !isMobileViewport()) return;
+    setYear(preferredCalendarYear(years));
+  }, [focusCurrentMonthRequest, years]);
+
+  React.useEffect(() => {
+    if (!focusCurrentMonthRequest || !isMobileViewport()) return;
+    if (year !== currentYear) return;
+
+    let frame = requestAnimationFrame(() => {
+      document.getElementById(`calendar-month-${currentMonthKey}`)?.scrollIntoView({ block: "start" });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [currentMonthKey, currentYear, focusCurrentMonthRequest, year]);
 
   const { current, best } = React.useMemo(() => streakInfo(outcome, daily), [daily, outcome]);
 
@@ -301,29 +341,29 @@ export default function CalendarView({ outcome, weekStartsOn }: { outcome: Outco
   }, [daily, outcome.daysOfWeek, outcome.endDate, outcome.id, outcome.startDate]);
 
   return (
-    <div className="grid gap-4">
-      <Card className="app-card-soft rounded-[0.95rem] p-5">
-        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-          <div>
+    <div className="app-calendar-view grid gap-4">
+      <Card className="app-calendar-hero app-card-soft rounded-[0.95rem] p-5">
+        <div className="app-calendar-hero-layout flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div className="app-calendar-hero-copy">
             <div className="app-kicker">Consistency calendar</div>
-            <div className="font-display mt-2 text-lg font-semibold">Scan the whole range and drop into any day.</div>
+            <div className="font-display mt-2 text-lg font-semibold">Scan the range.</div>
             <div className="mt-2 text-sm leading-6 app-muted">Active days: {formatDaysOfWeek(outcome.daysOfWeek)}</div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="app-pill rounded-[0.6rem] px-4 py-3 text-sm">
+          <div className="app-calendar-toolbar flex flex-wrap items-center gap-2">
+            <div className="app-calendar-stat app-pill rounded-[0.6rem] px-4 py-3 text-sm">
               <span className="app-muted">Current streak:</span> {current} day{current === 1 ? "" : "s"}
             </div>
-            <div className="app-pill rounded-[0.6rem] px-4 py-3 text-sm">
+            <div className="app-calendar-stat app-pill rounded-[0.6rem] px-4 py-3 text-sm">
               <span className="app-muted">Best streak:</span> {best} day{best === 1 ? "" : "s"}
             </div>
-            <div className="app-pill rounded-[0.6rem] px-4 py-3 text-sm">
+            <div className="app-calendar-stat app-pill rounded-[0.6rem] px-4 py-3 text-sm">
               <span className="app-muted">Done:</span> {doneDays}/{totalDays}
             </div>
 
             {years.length > 1 ? (
               <select
-                className="app-select h-10 rounded-[0.6rem] px-3 text-sm focus:outline-none"
+                className="app-calendar-year-select app-select h-10 rounded-[0.6rem] px-3 text-sm focus:outline-none"
                 value={year}
                 onChange={(e) => setYear(Number(e.target.value))}
               >
@@ -349,7 +389,7 @@ export default function CalendarView({ outcome, weekStartsOn }: { outcome: Outco
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
+        <div className="app-calendar-legend mt-4 flex flex-wrap items-center gap-3 text-xs">
           <div className="flex items-center gap-2 app-muted">
             <span className="inline-block h-3 w-3 rounded border border-[color:var(--app-border)] bg-[color:var(--app-elevated)]" /> Open
           </div>

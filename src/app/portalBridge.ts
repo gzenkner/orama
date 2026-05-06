@@ -26,6 +26,11 @@ type RemoteContextPayload = {
   accessToken?: string | null;
 };
 
+type PortalCommandAckPayload = {
+  type: "marketstate:orama-command-ack";
+  requestId: string;
+};
+
 export type RemoteSyncContext = {
   supabaseUrl: string;
   supabaseAnonKey: string;
@@ -36,6 +41,32 @@ function getParentWindow(): Window | null {
   if (typeof window === "undefined") return null;
   if (!window.parent || window.parent === window) return null;
   return window.parent;
+}
+
+function requestPortalCommand(type: "marketstate:orama-exit-request" | "marketstate:orama-logout-request"): Promise<boolean> {
+  const parentWindow = getParentWindow();
+  if (!parentWindow) return Promise.resolve(false);
+
+  return new Promise((resolve) => {
+    const requestId = `orama_cmd_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener("message", handleMessage);
+      resolve(false);
+    }, 900);
+
+    function handleMessage(event: MessageEvent<PortalCommandAckPayload>) {
+      if (event.source !== parentWindow) return;
+      if (event.data?.type !== "marketstate:orama-command-ack") return;
+      if (event.data.requestId !== requestId) return;
+
+      window.clearTimeout(timeout);
+      window.removeEventListener("message", handleMessage);
+      resolve(true);
+    }
+
+    window.addEventListener("message", handleMessage);
+    parentWindow.postMessage({ type, requestId }, "*");
+  });
 }
 
 async function readSameOriginParentContext(parentWindow: Window): Promise<RemoteSyncContext | null> {
@@ -111,4 +142,12 @@ export async function getRemoteSyncContext(): Promise<RemoteSyncContext | null> 
   if (sameOriginContext) return sameOriginContext;
 
   return requestCrossOriginParentContext(parentWindow);
+}
+
+export function requestPortalExit(): Promise<boolean> {
+  return requestPortalCommand("marketstate:orama-exit-request");
+}
+
+export function requestPortalLogout(): Promise<boolean> {
+  return requestPortalCommand("marketstate:orama-logout-request");
 }

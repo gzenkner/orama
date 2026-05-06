@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./app/App";
-import { loadRemoteStateIntoStore } from "./app/loadRemoteState";
+import { loadRemoteStateIntoStore, type RemoteLoadResult } from "./app/loadRemoteState";
 import { initializeRemoteStateSync } from "./app/remoteStateSync";
 import "./styles.css";
 
@@ -28,8 +28,9 @@ async function main() {
 
   renderBoot();
 
+  let remoteLoadResult: RemoteLoadResult = "unavailable";
   try {
-    await loadRemoteStateIntoStore(() => {
+    remoteLoadResult = await loadRemoteStateIntoStore(() => {
       renderBoot();
     });
   } catch (error) {
@@ -43,7 +44,7 @@ async function main() {
     </React.StrictMode>,
   );
 
-  initializeRemoteStateSync();
+  initializeRemoteStateSync({ pushInitialState: remoteLoadResult === "empty" });
 }
 
 void main();

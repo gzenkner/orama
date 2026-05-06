@@ -48,8 +48,8 @@ export default function BackupView() {
   }
 
   return (
-    <div className="grid gap-4">
-      <Card className="app-card-soft rounded-[0.95rem] p-5">
+    <div className="app-backup-view grid gap-4">
+      <Card className="app-backup-hero app-card-soft rounded-[0.95rem] p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="app-kicker">Backup</div>
@@ -101,14 +101,14 @@ export default function BackupView() {
         {backupStatus ? <div className="mt-3 text-sm app-muted">{backupStatus}</div> : null}
       </Card>
 
-      <Card className="rounded-[0.85rem] p-5">
+      <Card className="app-backup-card rounded-[0.85rem] p-5">
         <div className="app-kicker">Export</div>
         <div className="mt-3">
-          <Textarea value={exportRaw} readOnly className="min-h-64 font-mono text-xs" />
+          <Textarea value={exportRaw} readOnly className="app-backup-textarea min-h-64 font-mono text-xs" />
         </div>
       </Card>
 
-      <Card className="rounded-[0.85rem] p-5">
+      <Card className="app-backup-card rounded-[0.85rem] p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="app-kicker">Import</div>
@@ -141,7 +141,7 @@ export default function BackupView() {
         </div>
 
         <div className="mt-3">
-          <Textarea value={importRaw} onChange={(e) => setImportRaw(e.target.value)} placeholder="{ ... }" className="min-h-64 font-mono text-xs" />
+          <Textarea value={importRaw} onChange={(e) => setImportRaw(e.target.value)} placeholder="{ ... }" className="app-backup-textarea min-h-64 font-mono text-xs" />
         </div>
 
         {backupStatus ? <div className="mt-3 text-sm app-muted">{backupStatus}</div> : null}
